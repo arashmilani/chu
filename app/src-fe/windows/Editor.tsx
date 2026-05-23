@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { listProfiles } from "../ipc";
-import type { Profile } from "../ipc/types";
+import { SettingsForm } from "../components/SettingsForm";
+import { listProfiles, updateProfileSettings } from "../ipc";
+import type { Profile, ProfileSettings } from "../ipc/types";
 
 // Two-pane shell: profile list on the left, editor form on the right.
 // Stays minimal here — the slider machinery lands in Phase 8.
@@ -45,7 +46,20 @@ export function Editor() {
         {selected ? (
           <>
             <h1>{selected.name}</h1>
-            <p>Editing this profile lands in Phase 8.</p>
+            {selected.builtIn && (
+              <p>
+                Built-in presets are read-only — duplicate this one to edit.
+              </p>
+            )}
+            <SettingsForm
+              key={selected.id}
+              initial={selected.settings}
+              disabled={selected.builtIn}
+              onChange={(next: ProfileSettings) => {
+                if (selected.builtIn) return;
+                updateProfileSettings(selected.id, next).catch(() => {});
+              }}
+            />
           </>
         ) : (
           <p>Select a profile from the list.</p>
