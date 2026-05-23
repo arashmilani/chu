@@ -12,16 +12,7 @@ mod opcode {
     pub const REFRESH: u8 = 0x01;
     pub const SET_REFRESH_MODE: u8 = 0x02;
     pub const SET_SPEED: u8 = 0x04;
-    #[allow(dead_code)]
     pub const SET_CONTRAST: u8 = 0x05;
-    #[allow(dead_code)]
-    pub const SET_COLD_LIGHT: u8 = 0x06;
-    #[allow(dead_code)]
-    pub const SET_WARM_LIGHT: u8 = 0x07;
-    #[allow(dead_code)]
-    pub const SET_DITHER_MODE: u8 = 0x09;
-    #[allow(dead_code)]
-    pub const SET_COLOR_FILTER: u8 = 0x11;
 }
 
 /// Refresh modes exposed by the device. Naming follows the spec's
@@ -63,6 +54,12 @@ pub fn encode_set_refresh_mode(mode: RefreshMode) -> Vec<u8> {
     vec![USB_REPORT_ID, opcode::SET_REFRESH_MODE, mode.opcode_value()]
 }
 
+/// Encode `set_contrast`. Value is clamped to the spec range [0..=15].
+pub fn encode_set_contrast(contrast: u8) -> Vec<u8> {
+    let clamped = contrast.clamp(0, 15);
+    vec![USB_REPORT_ID, opcode::SET_CONTRAST, clamped]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,5 +94,18 @@ mod tests {
     fn set_speed_clamps_above_range_to_seven() {
         assert_eq!(encode_set_speed(8), vec![0x00, 0x04, 4]);
         assert_eq!(encode_set_speed(255), vec![0x00, 0x04, 4]);
+    }
+
+    #[test]
+    fn set_contrast_covers_full_range() {
+        for n in 0..=15u8 {
+            assert_eq!(encode_set_contrast(n), vec![0x00, 0x05, n], "contrast={n}");
+        }
+    }
+
+    #[test]
+    fn set_contrast_clamps_above_range_to_fifteen() {
+        assert_eq!(encode_set_contrast(16), vec![0x00, 0x05, 15]);
+        assert_eq!(encode_set_contrast(255), vec![0x00, 0x05, 15]);
     }
 }
