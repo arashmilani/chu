@@ -54,7 +54,11 @@ impl ProfileStore {
     /// Duplicate any profile (preset or custom) as a new editable
     /// custom profile. The duplicate's name is the source name plus
     /// " copy"; the caller can rename it afterward.
-    pub fn duplicate(&mut self, id: &ProfileId, now: OffsetDateTime) -> Result<ProfileId, ProfileError> {
+    pub fn duplicate(
+        &mut self,
+        id: &ProfileId,
+        now: OffsetDateTime,
+    ) -> Result<ProfileId, ProfileError> {
         let source = self.find(id).ok_or(ProfileError::NotFound)?.clone();
         let mut copy = source;
         let new_id = ProfileId::new_custom();

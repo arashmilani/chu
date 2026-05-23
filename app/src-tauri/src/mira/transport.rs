@@ -54,7 +54,11 @@ impl MockTransport {
     }
 
     pub fn writes(&self) -> Vec<Vec<u8>> {
-        self.state.lock().expect("mock transport poisoned").writes.clone()
+        self.state
+            .lock()
+            .expect("mock transport poisoned")
+            .writes
+            .clone()
     }
 
     /// Queue a single result that the next `write_feature` call will

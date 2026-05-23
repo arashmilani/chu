@@ -86,12 +86,7 @@ pub fn encode_set_dither_mode(mode: u8) -> Vec<u8> {
 pub fn encode_set_color_filter(white_filter: u8, black_filter: u8) -> Vec<u8> {
     let white = white_filter.clamp(0, 127);
     let black = black_filter.clamp(0, 127);
-    vec![
-        USB_REPORT_ID,
-        opcode::SET_COLOR_FILTER,
-        255 - white,
-        black,
-    ]
+    vec![USB_REPORT_ID, opcode::SET_COLOR_FILTER, 255 - white, black]
 }
 
 /// Encode `set_cold_light`. Value is clamped to [0..=254].
@@ -113,15 +108,7 @@ mod tests {
     #[test]
     fn set_speed_in_range_inverts_value() {
         // Spec range is 1..=7; wire value is 11 - n, so 1 -> 10 and 7 -> 4.
-        let cases = [
-            (1u8, 10u8),
-            (2, 9),
-            (3, 8),
-            (4, 7),
-            (5, 6),
-            (6, 5),
-            (7, 4),
-        ];
+        let cases = [(1u8, 10u8), (2, 9), (3, 8), (4, 7), (5, 6), (6, 5), (7, 4)];
         for (input, wire) in cases {
             assert_eq!(
                 encode_set_speed(input),
@@ -158,11 +145,7 @@ mod tests {
     #[test]
     fn set_dither_mode_covers_full_range() {
         for n in 0..=3u8 {
-            assert_eq!(
-                encode_set_dither_mode(n),
-                vec![0x00, 0x09, n],
-                "dither={n}",
-            );
+            assert_eq!(encode_set_dither_mode(n), vec![0x00, 0x09, n], "dither={n}",);
         }
     }
 
@@ -192,15 +175,9 @@ mod tests {
     #[test]
     fn set_color_filter_inverts_white_and_passes_black() {
         // white=0 (no whitening) => wire byte 0xFF; black=0 => 0x00.
-        assert_eq!(
-            encode_set_color_filter(0, 0),
-            vec![0x00, 0x11, 0xFF, 0x00]
-        );
+        assert_eq!(encode_set_color_filter(0, 0), vec![0x00, 0x11, 0xFF, 0x00]);
         // white=16 => 255-16=239; black=8 => 8 (Coding preset values).
-        assert_eq!(
-            encode_set_color_filter(16, 8),
-            vec![0x00, 0x11, 239, 8]
-        );
+        assert_eq!(encode_set_color_filter(16, 8), vec![0x00, 0x11, 239, 8]);
         // Spec max 127 for each.
         assert_eq!(
             encode_set_color_filter(127, 127),

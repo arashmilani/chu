@@ -73,7 +73,10 @@ fn diff_writes(current: Option<&ProfileSettings>, target: &ProfileSettings) -> V
         if current.is_none_or(|c| {
             c.white_filter != target.white_filter || c.black_filter != target.black_filter
         }) {
-            w.push(encode_set_color_filter(target.white_filter, target.black_filter));
+            w.push(encode_set_color_filter(
+                target.white_filter,
+                target.black_filter,
+            ));
         }
     };
     let push_if_changed_cold = |w: &mut Vec<Vec<u8>>| {

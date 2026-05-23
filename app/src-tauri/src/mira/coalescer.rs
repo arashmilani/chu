@@ -69,9 +69,7 @@ impl<T: HidTransport + ?Sized> Coalescer<T> {
         if now.duration_since(last) < self.window {
             return Ok(0);
         }
-        let drained: Vec<Vec<u8>> = std::mem::take(&mut state.pending)
-            .into_values()
-            .collect();
+        let drained: Vec<Vec<u8>> = std::mem::take(&mut state.pending).into_values().collect();
         state.last_submit = None;
         drop(state);
 
@@ -84,9 +82,7 @@ impl<T: HidTransport + ?Sized> Coalescer<T> {
     /// Drain everything regardless of timing — for shutdown.
     pub fn flush_all(&self) -> Result<usize, TransportError> {
         let mut state = self.state.lock().expect("coalescer poisoned");
-        let drained: Vec<Vec<u8>> = std::mem::take(&mut state.pending)
-            .into_values()
-            .collect();
+        let drained: Vec<Vec<u8>> = std::mem::take(&mut state.pending).into_values().collect();
         state.last_submit = None;
         drop(state);
 
@@ -117,12 +113,16 @@ mod tests {
         coalescer.submit(encode_set_speed(5), t0 + Duration::from_millis(10));
 
         // Still inside the 16ms window since last submit (10ms).
-        let flushed = coalescer.flush_if_quiet(t0 + Duration::from_millis(20)).unwrap();
+        let flushed = coalescer
+            .flush_if_quiet(t0 + Duration::from_millis(20))
+            .unwrap();
         assert_eq!(flushed, 0);
         assert!(mock.writes().is_empty());
 
         // Past the window: 30 - 10 = 20ms >= 16ms.
-        let flushed = coalescer.flush_if_quiet(t0 + Duration::from_millis(30)).unwrap();
+        let flushed = coalescer
+            .flush_if_quiet(t0 + Duration::from_millis(30))
+            .unwrap();
         assert_eq!(flushed, 1);
         assert_eq!(mock.writes(), vec![encode_set_speed(5)]);
     }
