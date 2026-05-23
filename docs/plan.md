@@ -14,21 +14,22 @@ is green and its exit criteria are met.
 | 2     | ✅ Complete | 28 Rust tests   | Profile + 6 presets + AsFound + Session::apply + Store CRUD                      |
 | 3     | ✅ Complete | 7 Rust tests    | Atomic writes, v0→v1 migration, corruption recovery                              |
 | 4     | ✅ Complete | 23 Rust tests   | AppState, typed AppError, list/apply/refresh/status/CRUD commands                |
-| 5     | ✅ Complete | 16 Rust tests   | Binding model + defaults + OS register/unregister + rebind + reset               |
-| 6     | ✅ Complete | 7 vitest specs  | Tokens, IPC, hooks (focus trap + positioning), three window shells               |
-| 7     | ✅ Complete | (in-app)        | Tray icon, popover/editor/settings windows, click toggle, menu, single-SPA route |
+| 5     | ✅ Complete | 16 Rust tests   | Binding model + 6 defaults (openPopover retired) + OS register/rebind/reset      |
+| 6     | 🟨 Revised  | (folded)        | Tokens + IPC retained; hooks/Popover/Editor removed in the tray-menu rewrite     |
+| 7     | ✅ Complete | 4 Rust tests    | Tray icon with dynamic profile menu + ◉/◎ title; popover removed                 |
 | 8     | ✅ Complete | 5 vitest specs  | SettingsForm with all 9 settings via native HTML inputs                          |
-| 9     | ✅ Complete | 5 vitest specs  | General / Hotkeys / Device / About panes wired end-to-end                        |
-| 10    | ✅ Complete | 5+3 specs       | First-run flag, welcome card, three-step flow, as-found capture                  |
+| 9     | ✅ Complete | 6 vitest specs  | Profiles + General + Hotkeys + Device + About panes in the only window           |
+| 10    | 🟨 Revised  | (backend only)  | First-run flag retained for future use; UI flow dropped, as-found capture stays  |
 | 11    | ✅ Complete | 2 vitest specs  | Discovery enumeration + picker in Device settings + multi-detected event         |
 | 12    | 🟨 Partial  | —               | Per-OS bundle configs, udev installer helpers, release workflow; signing TBD     |
 | 13    | ✅ Complete | (build)         | Lazy-loaded Editor/Settings chunks; a11y review notes below                      |
 
-**Totals:** 121 Rust unit tests + 32 frontend specs, all green; `cargo
+**Totals:** 125 Rust unit tests + 19 frontend specs, all green; `cargo
 clippy --all-targets -- -D warnings`, `cargo fmt --check`, `pnpm lint`,
-`pnpm typecheck`, `pnpm format:check` all pass. Production bundle:
-1.6KB Settings chunk + 1.1KB Editor chunk + 63KB main (gzipped), CSS
-2.4KB gzipped.
+`pnpm typecheck`, `pnpm format:check` all pass. Production bundle is
+back to a single chunk now that there's only one window — the
+lazy-load split disappeared with the Editor/Popover windows it was
+splitting.
 
 ### Phase 12 remaining
 
@@ -84,6 +85,28 @@ What was verified during the polish pass; what's still rough:
 - **Phase 5 OS-side registration landed alongside Phase 7.** The
   global-shortcut plugin needs the same Tauri runtime wiring as the
   tray, so they shipped together rather than as separate phases.
+
+### Behavioural divergence: tray menu replaces the popover window
+
+After live testing, the popover and profile-editor windows were
+removed in favour of a native OS tray context menu + a single Settings
+window. Reasoning:
+
+- The popover duplicated what `NSStatusItem` / Windows tray /
+  AppIndicator already do well, with worse keyboard navigation, no
+  OS conventions, and an extra render cycle.
+- The most-common action (switch profile) is now one click instead of
+  click → open popover → click profile.
+- The "Mira" tray title gained two states only: `Mira ◉` (filled
+  fisheye, OK) and `Mira ◎` (bullseye with a hole, anything else).
+  Two states require zero memory of which suffix means what.
+- The `openPopover` hotkey was retired with the popover.
+
+The Settings window keeps everything else: a new Profiles tab hosts
+the full editor (chip selector + Duplicate/Reset/Delete + nine-setting
+form), and the General / Hotkeys / Device / About tabs are unchanged.
+First-run is now silent — As-found capture still happens on initial
+device connection.
 
 ### Behavioural divergence: editable built-in presets
 

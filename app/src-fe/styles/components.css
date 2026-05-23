@@ -155,6 +155,24 @@
   color: var(--fg-inverse);
 }
 
+/* -- Profile chips (top of the Profiles tab) ----------------------- */
+
+.profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.profile-chips .btn {
+  padding: 0 var(--space-3);
+  min-height: 32px;
+}
+
+.profile-chips .btn[data-active="true"] {
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
 /* -- Editor (left rail + right pane) -------------------------------- */
 
 .editor {

@@ -1,35 +1,78 @@
 import { useEffect, useState } from "react";
 
 import { HotkeyRecorder } from "../components/HotkeyRecorder";
+import { SettingsForm } from "../components/SettingsForm";
 import {
   appVersion,
+  deleteProfile,
+  duplicateProfile,
   getAppSettings,
   listDevices,
+  listProfiles,
   resetHotkeys,
+  resetProfileToDefaults,
   selectDevice,
   setApplyLastOnConnect,
   setHotkey,
   setLaunchAtLogin,
+  updateProfileSettings,
 } from "../ipc";
-import type { AppSettings, DeviceInfo } from "../ipc/types";
+import type {
+  AppSettings,
+  DeviceInfo,
+  Profile,
+  ProfileSettings,
+} from "../ipc/types";
 import { HOTKEY_SLOTS } from "../ipc/types";
 
-type Tab = "General" | "Hotkeys" | "Device" | "About";
-const TABS: Tab[] = ["General", "Hotkeys", "Device", "About"];
+type Tab = "Profiles" | "General" | "Hotkeys" | "Device" | "About";
+const TABS: Tab[] = ["Profiles", "General", "Hotkeys", "Device", "About"];
 
-export function Settings() {
-  const [tab, setTab] = useState<Tab>("General");
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [version, setVersion] = useState<string>("");
+interface SettingsProps {
+  /** Test/preview hook — skip the IPC bootstrap. */
+  initialAppSettings?: AppSettings;
+  initialProfiles?: Profile[];
+  initialVersion?: string;
+}
+
+export function Settings({
+  initialAppSettings,
+  initialProfiles,
+  initialVersion,
+}: SettingsProps = {}) {
+  const [tab, setTab] = useState<Tab>("Profiles");
+  const [settings, setSettings] = useState<AppSettings | null>(
+    initialAppSettings ?? null,
+  );
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? []);
+  const [version, setVersion] = useState<string>(initialVersion ?? "");
 
   useEffect(() => {
-    getAppSettings()
-      .then(setSettings)
-      .catch(() => {});
-    appVersion()
-      .then(setVersion)
-      .catch(() => {});
-  }, []);
+    if (initialAppSettings === undefined) {
+      getAppSettings()
+        .then(setSettings)
+        .catch(() => {});
+    }
+    if (initialProfiles === undefined) {
+      listProfiles()
+        .then(setProfiles)
+        .catch(() => {});
+    }
+    if (initialVersion === undefined) {
+      appVersion()
+        .then(setVersion)
+        .catch(() => {});
+    }
+  }, [initialAppSettings, initialProfiles, initialVersion]);
+
+  async function refreshProfiles() {
+    try {
+      const ps = await listProfiles();
+      setProfiles(ps);
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <div className="settings">
@@ -60,30 +103,131 @@ export function Settings() {
       >
         <h1>{tab}</h1>
 
-        {!settings && <p>Loading…</p>}
-        {settings && tab === "General" && (
-          <GeneralPane
-            settings={settings}
-            onChange={(next) => setSettings(next)}
-          />
+        {tab === "Profiles" && (
+          <ProfilesPane profiles={profiles} onChange={refreshProfiles} />
         )}
-        {settings && tab === "Hotkeys" && (
-          <HotkeysPane
-            settings={settings}
-            onChange={(next) => setSettings(next)}
-          />
+        {tab === "General" && settings && (
+          <GeneralPane settings={settings} onChange={setSettings} />
         )}
-        {settings && tab === "Device" && (
-          <DevicePane
-            settings={settings}
-            onChange={(next) => setSettings(next)}
-          />
+        {tab === "Hotkeys" && settings && (
+          <HotkeysPane settings={settings} onChange={setSettings} />
+        )}
+        {tab === "Device" && settings && (
+          <DevicePane settings={settings} onChange={setSettings} />
         )}
         {tab === "About" && <AboutPane version={version} />}
+        {tab !== "Profiles" && tab !== "About" && !settings && <p>Loading…</p>}
       </section>
     </div>
   );
 }
+
+// -- Profiles tab ---------------------------------------------------
+
+interface ProfilesPaneProps {
+  profiles: Profile[];
+  onChange: () => Promise<void> | void;
+}
+
+function ProfilesPane({ profiles, onChange }: ProfilesPaneProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(
+    profiles[0]?.id ?? null,
+  );
+
+  // Derive a valid selection: if the user's pick is gone (deletion,
+  // first load), show the first profile. We don't write back into
+  // state here — the next user click does that. Keeps the effect
+  // purely a "user picked" channel.
+  const activeId =
+    selectedId && profiles.some((p) => p.id === selectedId)
+      ? selectedId
+      : (profiles[0]?.id ?? null);
+  const selected = profiles.find((p) => p.id === activeId);
+
+  async function onDuplicate() {
+    if (!selected) return;
+    try {
+      const newId = await duplicateProfile(selected.id);
+      await onChange();
+      setSelectedId(newId);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function onDelete() {
+    if (!selected || selected.builtIn) return;
+    try {
+      await deleteProfile(selected.id);
+      await onChange();
+    } catch {
+      // ignore
+    }
+  }
+
+  async function onReset() {
+    if (!selected || !selected.builtIn) return;
+    try {
+      await resetProfileToDefaults(selected.id);
+      await onChange();
+    } catch {
+      // ignore
+    }
+  }
+
+  if (profiles.length === 0) {
+    return <p>Loading profiles…</p>;
+  }
+
+  return (
+    <>
+      <nav aria-label="Profile picker" className="profile-chips">
+        {profiles.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className="btn"
+            data-active={p.id === activeId}
+            onClick={() => setSelectedId(p.id)}
+          >
+            {p.name}
+          </button>
+        ))}
+      </nav>
+
+      {selected && (
+        <>
+          <header className="editor__header">
+            <h2>{selected.name}</h2>
+            <div className="editor__header-actions">
+              <button type="button" className="btn" onClick={onDuplicate}>
+                Duplicate
+              </button>
+              {selected.builtIn ? (
+                <button type="button" className="btn" onClick={onReset}>
+                  Reset to defaults
+                </button>
+              ) : (
+                <button type="button" className="btn" onClick={onDelete}>
+                  Delete
+                </button>
+              )}
+            </div>
+          </header>
+          <SettingsForm
+            key={selected.id}
+            initial={selected.settings}
+            onChange={(next: ProfileSettings) => {
+              updateProfileSettings(selected.id, next).catch(() => {});
+            }}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+// -- Other panes ----------------------------------------------------
 
 interface PaneProps {
   settings: AppSettings;

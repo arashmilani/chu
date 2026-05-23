@@ -85,9 +85,9 @@ size, idle memory, and startup latency forever.
 │  ┌────────────────────────┐         ┌─────────────────────────────┐  │
 │  │   Frontend (React)     │ Tauri   │      Backend (Rust)         │  │
 │  │                        │ IPC /   │                             │  │
-│  │  • Tray popover        │ events  │  ┌───────────────────────┐  │  │
-│  │  • Profile editor      │◄───────►│  │ Command dispatcher    │  │  │
-│  │  • Settings window     │         │  └──────────┬────────────┘  │  │
+│  │  • Tray menu (native)  │ events  │  ┌───────────────────────┐  │  │
+│  │  • Settings window     │◄───────►│  │ Command dispatcher    │  │  │
+│  │    (profiles + prefs)  │         │  └──────────┬────────────┘  │  │
 │  │  • Hotkey recorder UI  │         │             │               │  │
 │  └────────────────────────┘         │  ┌──────────▼────────────┐  │  │
 │                                     │  │ Domain                │  │  │
@@ -251,7 +251,6 @@ defaults, and GNOME/KDE default keybindings.
 | Switch to profile 4 | ⌃⌥4              | Ctrl+Alt+4       |                |
 | Switch to profile 5 | ⌃⌥5              | Ctrl+Alt+5       |                |
 | Force full refresh  | ⌃⌥⇧R             | Ctrl+Alt+Shift+R | See note below |
-| Open tray popover   | ⌃⌥⇧M             | Ctrl+Alt+Shift+M | M for Mira     |
 
 Notes on the choices:
 
@@ -290,65 +289,67 @@ running and shows a persistent indicator in the tray icon until resolved.
 
 ## 9. User Interface
 
-### 9.1 Tray / menu-bar popover (primary)
+The shipped UI is intentionally minimal: a tray icon with a native OS
+context menu, and one Settings window that opens from it. The original
+spec called for a custom popover + a separate profile editor window;
+both were dropped because they duplicated what the OS already does
+well (a native tray menu) and forced users into a second screen for
+the most common action (switching profiles).
 
-The popover is the everyday interaction surface. It opens from a tray entry
-labelled with the wordmark **"Mira"** (a plain text glyph, not an icon
-asset). The tray entry's text changes to reflect state:
+### 9.1 Tray menu (primary surface)
 
-- Connected: "Mira"
-- Disconnected: "Mira —"
-- Hotkey registration failure: "Mira !"
+A single tray entry labelled with the wordmark **"Mira"** plus a
+status glyph:
 
-(The single-character suffix is enough; full detail is in the popover.)
+- Connected, hotkeys registered: **`Mira ◉`** (filled fisheye)
+- Disconnected or hotkey registration failure: **`Mira ◎`** (bullseye
+  with a hole)
 
-Popover contents (top to bottom):
+Two states only — earlier drafts had three (`Mira —` for disconnect,
+`Mira !` for hotkey failure) but in practice the bullseye glyph reads
+as "needs attention" without users having to remember which suffix
+means which.
 
-1. **Connection bar:** device name and "Connected" / "Disconnected — plug in
-   your Mira" status.
-2. **Active profile chip:** the profile name, with a small "edit" link that
-   opens the profile editor on this profile.
-3. **Profile grid:** the user's profiles as text buttons; click to apply.
-   First 8 visible, "More…" submenu for the rest.
-4. **Quick actions:** "Force full refresh" button, "Open profile editor",
-   "Settings".
-5. **Quit.**
+Clicking the tray icon (left-click on macOS, primary click anywhere)
+opens the native OS context menu directly. No popover window. The
+menu contents, top to bottom:
 
-Target popover open-to-interactive time: < 200ms cold.
+1. **Profile items** — every profile in order, with a checkmark next
+   to the currently active one. Click to apply.
+2. **Force full refresh** — disabled when no device is connected.
+3. **Settings…** — opens the only window in the app.
+4. **Quit Mira.**
 
-### 9.2 Profile editor window
+Because this is a native menu, OS conventions apply: keyboard
+navigation, mnemonics, and accessibility integration are all handled
+by the platform.
 
-Opened from the tray. Standard window with:
+### 9.2 Settings window (the only screen)
 
-- Left rail: list of profiles (presets and custom, grouped). Right-click /
-  ⌘-click for duplicate/delete/reorder.
-- Right pane: the editor described in [§7.3](#73-profile-editor-ux).
+A single resizable window opened from the tray's "Settings…" item.
+Five tabs along the left rail:
 
-### 9.3 Settings window
+- **Profiles** — horizontal chip list of every profile; selecting one
+  loads it into the editor below. Each chip toggles the active editing
+  target. Action bar: **Duplicate** (always present), and either
+  **Reset to defaults** (built-ins) or **Delete** (custom). The
+  editor is the full nine-setting form (refresh mode + seven sliders).
+- **General** — Launch at login toggle.
+- **Hotkeys** — Every spec §8.1 slot with an inline recorder per row
+  and a "Reset hotkeys to defaults" button at the bottom.
+- **Device** — Apply-last-profile-on-connect toggle, plus a radio
+  list of every detected Mira (the multi-device picker).
+- **About** — version, license, source link.
 
-Smaller window for app-level options:
+### 9.3 First run
 
-- **General:** Launch at login (off by default), show in Dock/Taskbar
-  (macOS hides by default, behaves as a menu-bar-only app).
-- **Hotkeys:** all global bindings with recorders, "Reset to defaults".
-- **Device:** manual variant override, refresh-on-connect toggle,
-  apply-last-profile-on-connect toggle.
-- **About:** version, links, license.
+Trivial: nothing to do. The Settings window is self-explanatory and
+the tray menu surfaces the common actions without onboarding. The
+As-found profile is still captured automatically on first device
+connection so users can revert any unintended changes; it appears in
+the profile list alongside the six shipped presets.
 
-### 9.4 First-run experience
-
-On first launch with a device connected:
-
-1. Welcome card explaining what the app does.
-2. Auto-detected device shown with its current settings captured as the
-   "As-found" profile.
-3. Brief tour of the six presets (one click to preview each).
-4. Offer to enable launch-at-login (default off, with one-tap accept).
-
-If no device is connected, the welcome card shows a "waiting for device"
-state and live-reacts when one is plugged in.
-
-### 9.5 E-ink-friendly UI (default, always on)
+### 9.4 E-ink-friendly UI (default, always on)
 
 Because this app is _about_ an e-ink monitor, users will frequently view its
 own UI on the Mira. Rather than building a separate "E-ink mode" and a
@@ -361,13 +362,13 @@ notice it works.
 
 - **Pure black on pure white.** `#000` text on `#fff` backgrounds. No
   gray-on-gray text, no `#fafafa` chrome.
-- **Solid borders, no shadows.** Panels and popovers use 1–2px hard borders.
+- **Solid borders, no shadows.** Panels and inputs use 1–2px hard borders.
   No `box-shadow`, no blur, no translucency / vibrancy.
 - **No gradients, no soft elevation.** Active and selected states use bold
   borders or solid fills, not background tints.
 - **Color is never load-bearing.** Status is always communicated by both a
   text-glyph and a label (e.g. "● Connected" / "○ Disconnected"), so the UI
-  is fully usable in monochrome. The few "glyphs" used (●, ○, —, !) are
+  is fully usable in monochrome. The glyphs in use (●, ○, ◉, ◎) are
   Unicode characters, not icon assets.
 - **Large hit targets.** ≥40×40px for buttons and slider thumbs; ≥44px row
   height in lists.
@@ -375,8 +376,8 @@ notice it works.
 
 **Motion rules:**
 
-- Profile switches, popover open/close, and modal open/close are
-  instantaneous — no fades, no slides.
+- Profile switches and Settings window open/close are instantaneous —
+  no fades, no slides.
 - No spinners, no skeleton loaders. The rare blocking operation uses a
   static "Working…" label.
 - Hover styles are functional only (focus ring), not decorative

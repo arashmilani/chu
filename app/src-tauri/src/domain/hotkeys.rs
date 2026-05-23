@@ -106,14 +106,15 @@ impl fmt::Display for Binding {
     }
 }
 
-/// Named slots from spec §8.1. Eight bindings; rest are open for future.
+/// Named slots from spec §8.1. Six bindings — the original
+/// "open popover" hotkey is gone with the popover (the tray menu is
+/// now the primary surface and opens on left-click).
 pub const SLOT_PROFILE_1: &str = "profile1";
 pub const SLOT_PROFILE_2: &str = "profile2";
 pub const SLOT_PROFILE_3: &str = "profile3";
 pub const SLOT_PROFILE_4: &str = "profile4";
 pub const SLOT_PROFILE_5: &str = "profile5";
 pub const SLOT_REFRESH: &str = "refresh";
-pub const SLOT_OPEN_POPOVER: &str = "openPopover";
 
 /// Spec §8.1 defaults, returned as `(slot, binding)` pairs.
 pub fn default_bindings() -> Vec<(&'static str, Binding)> {
@@ -125,7 +126,6 @@ pub fn default_bindings() -> Vec<(&'static str, Binding)> {
         (SLOT_PROFILE_4, parse("Ctrl+Alt+4")),
         (SLOT_PROFILE_5, parse("Ctrl+Alt+5")),
         (SLOT_REFRESH, parse("Ctrl+Alt+Shift+R")),
-        (SLOT_OPEN_POPOVER, parse("Ctrl+Alt+Shift+M")),
     ]
 }
 
@@ -192,12 +192,12 @@ mod tests {
     #[test]
     fn defaults_match_spec_8_1() {
         let defs = default_bindings();
-        assert_eq!(defs.len(), 7);
+        // Six bindings — openPopover was retired with the popover.
+        assert_eq!(defs.len(), 6);
         let by_slot: std::collections::HashMap<_, _> = defs.into_iter().collect();
         assert_eq!(by_slot[SLOT_PROFILE_1].to_string(), "Ctrl+Alt+1");
         assert_eq!(by_slot[SLOT_PROFILE_5].to_string(), "Ctrl+Alt+5");
         assert_eq!(by_slot[SLOT_REFRESH].to_string(), "Ctrl+Alt+Shift+R");
-        assert_eq!(by_slot[SLOT_OPEN_POPOVER].to_string(), "Ctrl+Alt+Shift+M");
     }
 
     #[test]

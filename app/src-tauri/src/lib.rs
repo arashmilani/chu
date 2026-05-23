@@ -6,23 +6,25 @@ pub mod tray;
 
 use std::sync::Arc;
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::commands::{AppError, AppState};
 use crate::domain::hotkeys::{
-    default_bindings, Binding, SLOT_OPEN_POPOVER, SLOT_PROFILE_1, SLOT_PROFILE_2, SLOT_PROFILE_3,
-    SLOT_PROFILE_4, SLOT_PROFILE_5, SLOT_REFRESH,
+    default_bindings, Binding, SLOT_PROFILE_1, SLOT_PROFILE_2, SLOT_PROFILE_3, SLOT_PROFILE_4,
+    SLOT_PROFILE_5, SLOT_REFRESH,
 };
 use crate::domain::profile::{Profile, ProfileId, ProfileSettings};
 use crate::hotkeys::{binding_to_shortcut, HotkeyManager};
 use crate::tray::TrayState;
 
-const WINDOW_POPOVER: &str = "popover";
-const WINDOW_EDITOR: &str = "editor";
 const WINDOW_SETTINGS: &str = "settings";
+const TRAY_ID: &str = "mira-tray";
+const PROFILE_MENU_PREFIX: &str = "profile:";
+
+// -- Tauri commands --------------------------------------------------
 
 #[tauri::command]
 fn list_profiles(state: State<'_, Arc<AppState>>) -> Vec<Profile> {
@@ -37,29 +39,42 @@ fn apply_profile(
 ) -> Result<commands::profiles::ApplyOutcome, AppError> {
     let outcome = commands::profiles::apply_profile(&state, id.clone())?;
     let _ = app.emit("profile:applied", &outcome);
+    let _ = refresh_tray(&app);
     Ok(outcome)
 }
 
 #[tauri::command]
 fn duplicate_profile(
     state: State<'_, Arc<AppState>>,
+    app: AppHandle,
     id: ProfileId,
 ) -> Result<ProfileId, AppError> {
-    commands::profiles::duplicate_profile(&state, id)
+    let new_id = commands::profiles::duplicate_profile(&state, id)?;
+    let _ = refresh_tray(&app);
+    Ok(new_id)
 }
 
 #[tauri::command]
 fn rename_profile(
     state: State<'_, Arc<AppState>>,
+    app: AppHandle,
     id: ProfileId,
     new_name: String,
 ) -> Result<(), AppError> {
-    commands::profiles::rename_profile(&state, id, new_name)
+    commands::profiles::rename_profile(&state, id, new_name)?;
+    let _ = refresh_tray(&app);
+    Ok(())
 }
 
 #[tauri::command]
-fn delete_profile(state: State<'_, Arc<AppState>>, id: ProfileId) -> Result<(), AppError> {
-    commands::profiles::delete_profile(&state, id)
+fn delete_profile(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    id: ProfileId,
+) -> Result<(), AppError> {
+    commands::profiles::delete_profile(&state, id)?;
+    let _ = refresh_tray(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -114,14 +129,12 @@ fn set_hotkey(
     let manager = app.try_state::<Arc<HotkeyManager>>();
     let global = app.global_shortcut();
 
-    // Unregister the previous chord (if any) for this slot.
     if let Some(manager) = manager.as_ref() {
         if let Some(prev) = manager.take(&slot) {
             let _ = global.unregister(prev);
         }
     }
 
-    // Register the new chord (if provided + parseable).
     if let Some(text) = binding.as_deref() {
         let parsed = Binding::parse(text)
             .map_err(|e| AppError::invalid_input(format!("hotkey parse: {e}")))?;
@@ -183,7 +196,6 @@ fn list_devices() -> Vec<crate::mira::discovery::DeviceInfo> {
 #[tauri::command]
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn udev_rule_text() -> &'static str {
-    // The exact rule from spec §12.2.
     "SUBSYSTEM==\"hidraw\", ATTRS{idVendor}==\"0416\", ATTRS{idProduct}==\"5020\", \
      MODE=\"0660\", GROUP=\"plugdev\", TAG+=\"uaccess\"\n"
 }
@@ -207,8 +219,36 @@ fn select_device(
     serial: Option<String>,
 ) -> Result<(), AppError> {
     state.set_selected_device_serial(serial);
-    // Re-attach the matching transport, if any.
     let _ = try_attach_selected_device(&state, &app);
+    Ok(())
+}
+
+#[tauri::command]
+fn open_settings(app: AppHandle) -> Result<(), AppError> {
+    open_settings_window(&app).map_err(|e| AppError::internal(e.to_string()))
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+// -- Internal helpers ------------------------------------------------
+
+fn open_settings_window(app: &AppHandle) -> Result<(), tauri::Error> {
+    if let Some(window) = app.get_webview_window(WINDOW_SETTINGS) {
+        window.show()?;
+        window.set_focus()?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(
+        app,
+        WINDOW_SETTINGS,
+        WebviewUrl::App("index.html?window=settings".into()),
+    )
+    .title("Mira — Settings")
+    .inner_size(820.0, 600.0)
+    .build()?;
     Ok(())
 }
 
@@ -220,9 +260,6 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
             return false;
         }
     };
-    // hidapi caches the enumeration on construction; without an
-    // explicit refresh, we won't see devices that were plugged in
-    // after the process started.
     if let Err(e) = api.refresh_devices() {
         eprintln!("[mira] hidapi refresh_devices failed: {e}");
     }
@@ -236,11 +273,11 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
                 commands::device::DeviceStatus { connected: false },
             );
             eprintln!("[mira] no Mira devices found on bus (was connected, now disconnected)");
+            let _ = refresh_tray(app);
         }
         return false;
     }
 
-    // Honour the user's selection if it matches a present device.
     let selected_serial = state.selected_device_serial();
     let target = if let Some(serial) = selected_serial.as_deref() {
         devices
@@ -253,7 +290,6 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
     };
 
     if let Some(picked) = target {
-        // If we're already connected, don't churn — just confirm.
         if state.is_connected() {
             return true;
         }
@@ -275,6 +311,7 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
                 if devices.len() > 1 {
                     let _ = app.emit("device:multi-detected", &devices);
                 }
+                let _ = refresh_tray(app);
                 true
             }
             Err(e) => {
@@ -291,9 +328,6 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
 }
 
 fn spawn_device_watcher(state: Arc<AppState>, app: AppHandle) {
-    // Periodic re-enumeration so hotplug works. 2s is short enough to
-    // feel responsive and long enough not to thrash hidapi (which on
-    // macOS re-walks IOKit on every call).
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -302,147 +336,141 @@ fn spawn_device_watcher(state: Arc<AppState>, app: AppHandle) {
     });
 }
 
-#[tauri::command]
-fn open_editor(app: AppHandle) -> Result<(), AppError> {
-    show_or_create(&app, WINDOW_EDITOR).map_err(|e| AppError::internal(e.to_string()))
+// -- Tray ------------------------------------------------------------
+
+fn profile_id_to_key(id: &ProfileId) -> String {
+    serde_json::to_value(id)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default()
 }
 
-#[tauri::command]
-fn open_settings(app: AppHandle) -> Result<(), AppError> {
-    show_or_create(&app, WINDOW_SETTINGS).map_err(|e| AppError::internal(e.to_string()))
+fn profile_id_from_key(s: &str) -> Option<ProfileId> {
+    serde_json::from_value::<ProfileId>(serde_json::Value::String(s.to_string())).ok()
 }
 
-#[tauri::command]
-fn close_popover(app: AppHandle) -> Result<(), AppError> {
-    if let Some(window) = app.get_webview_window(WINDOW_POPOVER) {
-        let _ = window.hide();
-    }
-    Ok(())
-}
+/// Build the tray menu from current state. Called at startup and
+/// whenever profiles or device state change.
+fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let menu = Menu::new(app)?;
+    let state_opt = app.try_state::<Arc<AppState>>();
 
-#[tauri::command]
-fn quit_app(app: AppHandle) {
-    app.exit(0);
-}
-
-fn show_or_create(app: &AppHandle, label: &str) -> Result<(), tauri::Error> {
-    if let Some(window) = app.get_webview_window(label) {
-        window.show()?;
-        window.set_focus()?;
-        return Ok(());
-    }
-    let url = WebviewUrl::App(format!("index.html?window={label}").into());
-    let builder = match label {
-        WINDOW_POPOVER => WebviewWindowBuilder::new(app, label, url)
-            .title("Mira")
-            .decorations(false)
-            .resizable(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .inner_size(360.0, 480.0)
-            .visible(false),
-        WINDOW_EDITOR => WebviewWindowBuilder::new(app, label, url)
-            .title("Mira — Profile editor")
-            .inner_size(900.0, 600.0),
-        WINDOW_SETTINGS => WebviewWindowBuilder::new(app, label, url)
-            .title("Mira — Settings")
-            .inner_size(640.0, 480.0)
-            .resizable(false),
-        _ => WebviewWindowBuilder::new(app, label, url),
+    let (profiles, active_id, connected) = match state_opt {
+        Some(state) => (
+            state.list_profiles(),
+            state.active_profile_id(),
+            state.is_connected(),
+        ),
+        None => (Vec::new(), None, false),
     };
-    builder.build()?;
-    Ok(())
-}
 
-fn toggle_popover(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(WINDOW_POPOVER) {
-        match window.is_visible() {
-            Ok(true) => {
-                let _ = window.hide();
-            }
-            _ => {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }
-    } else {
-        let _ = show_or_create(app, WINDOW_POPOVER);
-        if let Some(window) = app.get_webview_window(WINDOW_POPOVER) {
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+    for profile in &profiles {
+        let id = format!("{PROFILE_MENU_PREFIX}{}", profile_id_to_key(&profile.id));
+        let is_active = active_id.as_ref() == Some(&profile.id);
+        let item =
+            CheckMenuItem::with_id(app, &id, &profile.name, true, is_active, None::<&str>)?;
+        menu.append(&item)?;
     }
-}
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open_editor_item = MenuItem::with_id(
-        app,
-        "open_editor",
-        "Open profile editor…",
-        true,
-        None::<&str>,
-    )?;
-    let open_settings_item =
-        MenuItem::with_id(app, "open_settings", "Settings…", true, None::<&str>)?;
+    if !profiles.is_empty() {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+    }
+
     let refresh_item = MenuItem::with_id(
         app,
         "force_refresh",
         "Force full refresh",
-        true,
+        connected,
         None::<&str>,
     )?;
-    let separator = PredefinedMenuItem::separator(app)?;
+    menu.append(&refresh_item)?;
+
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+
+    let settings_item =
+        MenuItem::with_id(app, "open_settings", "Settings…", true, None::<&str>)?;
+    menu.append(&settings_item)?;
+
     let quit_item = MenuItem::with_id(app, "quit", "Quit Mira", true, None::<&str>)?;
-    let menu = Menu::with_items(
-        app,
-        &[
-            &open_editor_item,
-            &open_settings_item,
-            &refresh_item,
-            &separator,
-            &quit_item,
-        ],
-    )?;
+    menu.append(&quit_item)?;
 
-    let initial_title = TrayState {
-        connected: false,
-        hotkeys_ok: true,
+    Ok(menu)
+}
+
+fn tray_state(app: &AppHandle) -> TrayState {
+    let connected = app
+        .try_state::<Arc<AppState>>()
+        .map(|s| s.is_connected())
+        .unwrap_or(false);
+    let hotkeys_ok = app
+        .try_state::<Arc<HotkeyManager>>()
+        .map(|m| !m.registered_slots().is_empty())
+        .unwrap_or(true);
+    TrayState {
+        connected,
+        hotkeys_ok,
     }
-    .title();
+}
 
-    TrayIconBuilder::with_id("mira-tray")
-        .title(initial_title)
+fn refresh_tray(app: &AppHandle) -> tauri::Result<()> {
+    let tray = match app.tray_by_id(TRAY_ID) {
+        Some(t) => t,
+        None => return Ok(()),
+    };
+    let menu = build_tray_menu(app)?;
+    tray.set_menu(Some(menu))?;
+    tray.set_title(Some(tray_state(app).title()))?;
+    Ok(())
+}
+
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build_tray_menu(app)?;
+    TrayIconBuilder::with_id(TRAY_ID)
+        .title(tray_state(app).title())
         .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "open_editor" => {
-                let _ = show_or_create(app, WINDOW_EDITOR);
-            }
-            "open_settings" => {
-                let _ = show_or_create(app, WINDOW_SETTINGS);
-            }
-            "force_refresh" => {
-                if let Some(state) = app.try_state::<Arc<AppState>>() {
-                    let _ = state.force_refresh();
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| {
+            let id = event.id.as_ref();
+            if let Some(key) = id.strip_prefix(PROFILE_MENU_PREFIX) {
+                if let Some(profile_id) = profile_id_from_key(key) {
+                    if let Some(state) = app.try_state::<Arc<AppState>>() {
+                        match state.apply_profile(&profile_id) {
+                            Ok(frames) => {
+                                let _ = app.emit(
+                                    "profile:applied",
+                                    commands::profiles::ApplyOutcome {
+                                        profile_id,
+                                        frames_written: frames.len(),
+                                    },
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("[mira] apply from tray failed: {e}");
+                            }
+                        }
+                        let _ = refresh_tray(app);
+                    }
                 }
+                return;
             }
-            "quit" => app.exit(0),
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                toggle_popover(tray.app_handle());
+            match id {
+                "open_settings" => {
+                    let _ = open_settings_window(app);
+                }
+                "force_refresh" => {
+                    if let Some(state) = app.try_state::<Arc<AppState>>() {
+                        let _ = state.force_refresh();
+                    }
+                }
+                "quit" => app.exit(0),
+                _ => {}
             }
         })
         .build(app)?;
-
     Ok(())
 }
+
+// -- Hotkeys ---------------------------------------------------------
 
 fn register_default_shortcuts(app: &AppHandle) -> bool {
     let manager = match app.try_state::<Arc<HotkeyManager>>() {
@@ -461,6 +489,7 @@ fn register_default_shortcuts(app: &AppHandle) -> bool {
             None => all_ok = false,
         }
     }
+    let _ = refresh_tray(app);
     all_ok
 }
 
@@ -480,10 +509,6 @@ fn dispatch_hotkey(app: &AppHandle, slot: &str) {
             let _ = state.force_refresh();
             return;
         }
-        SLOT_OPEN_POPOVER => {
-            toggle_popover(app);
-            return;
-        }
         _ => None,
     };
     if let Some(id) = target_id {
@@ -495,6 +520,7 @@ fn dispatch_hotkey(app: &AppHandle, slot: &str) {
                 frames_written: 0,
             },
         );
+        let _ = refresh_tray(app);
     }
 }
 
@@ -506,10 +532,6 @@ fn slot_for_shortcut(
         .registered_slots()
         .into_iter()
         .filter_map(|slot| {
-            // We need to look up the shortcut for each slot. The manager
-            // doesn't expose this directly, so duplicate the default
-            // mapping here — fine for v1 since rebinds also update
-            // through the same code path.
             default_bindings()
                 .into_iter()
                 .find(|(s, _)| *s == slot)
@@ -522,6 +544,8 @@ fn slot_for_shortcut(
         .find(|(_, s)| s == shortcut)
         .map(|(slot, _)| slot)
 }
+
+// -- Entry point -----------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -558,24 +582,7 @@ pub fn run() {
                 let _ = register_default_shortcuts(&handle);
                 let _ = try_attach_selected_device(&state, &handle);
                 spawn_device_watcher(state.clone(), handle.clone());
-                // Bootstrap: show the popover once on launch so the
-                // user sees the app actually started. After first
-                // hide it lives in the tray.
-                let _ = show_or_create(&handle, WINDOW_POPOVER);
-                if let Some(window) = handle.get_webview_window(WINDOW_POPOVER) {
-                    let _ = window.show();
-                }
                 Ok(())
-            }
-        })
-        .on_window_event(|window, event| {
-            // Hide popover on focus loss / close request so it
-            // behaves like a real tray popover.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == WINDOW_POPOVER {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -601,9 +608,7 @@ pub fn run() {
             select_device,
             udev_rule_text,
             udev_rule_present,
-            open_editor,
             open_settings,
-            close_popover,
             quit_app,
         ])
         .build(tauri::generate_context!())

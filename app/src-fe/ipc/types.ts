@@ -78,5 +78,4 @@ export const HOTKEY_SLOTS: { slot: string; label: string }[] = [
   { slot: "profile4", label: "Switch to profile 4" },
   { slot: "profile5", label: "Switch to profile 5" },
   { slot: "refresh", label: "Force full refresh" },
-  { slot: "openPopover", label: "Open tray popover" },
 ];
