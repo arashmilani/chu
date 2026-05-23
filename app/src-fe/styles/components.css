@@ -1,0 +1,582 @@
+/* Component styles. One file because the UI surface is small;
+ * extracted from each window's JSX so the structure stays clean.
+ *
+ * Conventions:
+ * - Class names follow a flat BEM-lite scheme: block, block__element,
+ *   block--modifier. Modifier states map to data-active / aria-* on
+ *   the element so JSX stays readable.
+ * - All measurements use the tokens in tokens.css.
+ */
+
+/* -- Buttons -------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--hit-target);
+  padding: 0 var(--space-4);
+  background: var(--bg);
+  color: var(--fg);
+  border: var(--border);
+  font-size: var(--font-size-body);
+  font-weight: 500;
+  letter-spacing: 0;
+  cursor: pointer;
+  user-select: none;
+  transition: none;
+}
+
+.btn:hover:not(:disabled) {
+  border-width: var(--border-emphasis);
+  padding: 0
+    calc(var(--space-4) - (var(--border-emphasis) - var(--border-width)));
+}
+
+.btn:active:not(:disabled) {
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
+.btn:disabled {
+  color: var(--fg-disabled);
+  border-color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+
+.btn--ghost {
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  padding: 0 var(--space-2);
+  min-height: auto;
+}
+
+.btn--ghost:hover {
+  text-decoration-thickness: var(--border-emphasis);
+}
+
+.btn--icon {
+  min-width: var(--hit-target);
+  padding: 0;
+  font-family: var(--font-mono);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* -- Popover -------------------------------------------------------- */
+
+.popover {
+  width: var(--popover-width);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.popover__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border);
+  font-size: var(--font-size-ui);
+}
+
+.popover__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.popover__status-glyph {
+  font-family: var(--font-mono);
+  width: 1ch;
+  display: inline-block;
+}
+
+.popover__active {
+  padding: var(--space-4);
+  border-bottom: var(--border);
+}
+
+.popover__active-label {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+  margin-bottom: var(--space-1);
+}
+
+.popover__active-name {
+  font-size: var(--font-size-h1);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+}
+
+.popover__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  align-content: start;
+}
+
+.popover__grid .btn {
+  justify-content: flex-start;
+  padding: 0 var(--space-3);
+  text-align: left;
+}
+
+.popover__actions {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-top: var(--border);
+}
+
+/* Active state uses a solid fill, not a tint, per spec §9.5. */
+.popover__grid .btn[data-active="true"] {
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
+/* -- Editor (left rail + right pane) -------------------------------- */
+
+.editor {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.editor__rail {
+  border-right: var(--border);
+  overflow-y: auto;
+  padding: var(--space-4) 0;
+}
+
+.editor__rail ul {
+  display: grid;
+}
+
+.editor__rail .btn {
+  border: none;
+  border-left: var(--border-emphasis) solid transparent;
+  width: 100%;
+  justify-content: flex-start;
+  min-height: var(--row-height);
+  padding: 0 var(--space-4);
+  font-weight: 500;
+}
+
+.editor__rail .btn[data-active="true"] {
+  border-left-color: var(--fg);
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.editor__rail .btn:hover {
+  background: var(--bg);
+  border-left-color: var(--fg);
+  padding: 0 var(--space-4);
+}
+
+.editor__pane {
+  padding: var(--space-6);
+  max-width: var(--content-max);
+  overflow-y: auto;
+}
+
+.editor__pane > h1 {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  margin-bottom: var(--space-2);
+}
+
+.editor__readonly {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border: var(--border);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+  margin-bottom: var(--space-5);
+}
+
+/* -- Settings ------------------------------------------------------- */
+
+.settings {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  height: 100vh;
+}
+
+.settings__tabs {
+  border-right: var(--border);
+  padding: var(--space-4) 0;
+  display: grid;
+  align-content: start;
+}
+
+.settings__tabs .btn {
+  border: none;
+  border-left: var(--border-emphasis) solid transparent;
+  width: 100%;
+  justify-content: flex-start;
+  min-height: var(--row-height);
+  padding: 0 var(--space-4);
+  font-weight: 500;
+}
+
+.settings__tabs .btn[data-active="true"],
+.settings__tabs .btn[aria-selected="true"] {
+  border-left-color: var(--fg);
+  font-weight: 700;
+}
+
+.settings__pane {
+  padding: var(--space-6);
+  max-width: var(--content-max);
+  overflow-y: auto;
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+}
+
+.settings__pane > h1 {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+}
+
+/* -- Forms (settings form + welcome opt-ins) ------------------------ */
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.field__label {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+}
+
+.field__value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.field__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+/* Native range slider, restyled. */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: var(--hit-target);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: var(--border-width);
+  background: var(--fg);
+}
+
+input[type="range"]::-moz-range-track {
+  height: var(--border-width);
+  background: var(--fg);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--space-5);
+  height: var(--space-5);
+  background: var(--bg);
+  border: var(--border-emphasis-style);
+  border-radius: 0;
+  margin-top: calc(var(--space-5) / -2);
+  cursor: grab;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: var(--space-5);
+  height: var(--space-5);
+  background: var(--bg);
+  border: var(--border-emphasis-style);
+  border-radius: 0;
+  cursor: grab;
+}
+
+input[type="range"]:disabled {
+  cursor: not-allowed;
+}
+
+input[type="range"]:disabled::-webkit-slider-thumb,
+input[type="range"]:disabled::-moz-range-thumb {
+  border-color: var(--fg-disabled);
+  background: var(--bg);
+}
+
+input[type="range"]:disabled::-webkit-slider-runnable-track,
+input[type="range"]:disabled::-moz-range-track {
+  background: var(--fg-disabled);
+}
+
+/* Radio + checkbox shared base. */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--space-5);
+  height: var(--space-5);
+  margin: 0;
+  border: var(--border-emphasis-style);
+  background: var(--bg);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+input[type="radio"] {
+  border-radius: 50%;
+}
+
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: var(--fg);
+}
+
+input[type="radio"]:checked::before {
+  border-radius: 50%;
+}
+
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  border-color: var(--fg-disabled);
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+
+/* Fieldset (refresh-mode radio group) */
+fieldset {
+  border: var(--border);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+fieldset > legend {
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+}
+
+fieldset label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+
+fieldset:disabled label {
+  cursor: not-allowed;
+  color: var(--fg-disabled);
+}
+
+/* -- SettingsForm layout ------------------------------------------- */
+
+.settings-form {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.slider-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.slider-row > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+}
+
+.slider-row output {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--font-size-mono);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* -- Hotkey list & recorder ---------------------------------------- */
+
+.hotkey-list {
+  display: grid;
+  gap: var(--space-1);
+  border: var(--border);
+}
+
+.hotkey-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  min-height: var(--row-height);
+  border-bottom: var(--border);
+}
+
+.hotkey-list li:last-child {
+  border-bottom: none;
+}
+
+.hotkey-recorder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hotkey-recorder button {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+  background: var(--bg);
+  color: var(--fg);
+  border: var(--border);
+  min-height: var(--hit-target);
+  padding: 0 var(--space-3);
+  cursor: pointer;
+}
+
+.hotkey-recorder button:hover {
+  border-width: var(--border-emphasis);
+  padding: 0
+    calc(var(--space-3) - (var(--border-emphasis) - var(--border-width)));
+}
+
+.hotkey-recorder button + button {
+  min-width: var(--hit-target);
+  padding: 0;
+}
+
+/* -- About pane ---------------------------------------------------- */
+
+.about {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--space-3) var(--space-5);
+  border: var(--border);
+  padding: var(--space-5);
+}
+
+.about dt {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+}
+
+.about dd {
+  margin: 0;
+}
+
+/* -- Welcome ------------------------------------------------------- */
+
+.welcome {
+  display: grid;
+  gap: var(--space-5);
+  align-content: center;
+  padding: var(--space-7) var(--space-6);
+  width: var(--popover-width);
+  min-height: 100vh;
+}
+
+.welcome h2 {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.welcome p {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  max-width: 32ch;
+}
+
+.welcome .btn {
+  justify-self: start;
+  background: var(--bg-inverse);
+  color: var(--fg-inverse);
+}
+
+.welcome .toggle-row {
+  margin: var(--space-3) 0;
+}
+
+/* -- Misc ---------------------------------------------------------- */
+
+section[aria-label="Connected devices"] {
+  border: var(--border);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+section[aria-label="Connected devices"] h2 {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+}
+
+section[aria-label="Connected devices"] li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}

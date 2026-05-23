@@ -33,12 +33,17 @@ export function Settings() {
 
   return (
     <div className="settings">
-      <nav aria-label="Settings sections" role="tablist" className="tabs">
+      <nav
+        aria-label="Settings sections"
+        role="tablist"
+        className="settings__tabs"
+      >
         {TABS.map((t) => (
           <button
             key={t}
             type="button"
             role="tab"
+            className="btn"
             aria-selected={t === tab}
             data-active={t === tab}
             onClick={() => setTab(t)}
@@ -48,7 +53,11 @@ export function Settings() {
         ))}
       </nav>
 
-      <section role="tabpanel" aria-label={`${tab} settings`} className="pane">
+      <section
+        role="tabpanel"
+        aria-label={`${tab} settings`}
+        className="settings__pane"
+      >
         <h1>{tab}</h1>
 
         {!settings && <p>Loading…</p>}
@@ -120,6 +129,7 @@ function HotkeysPane({ settings, onChange }: PaneProps) {
       </ul>
       <button
         type="button"
+        className="btn"
         onClick={() => {
           resetHotkeys()
             .then(() => getAppSettings())

@@ -53,13 +53,14 @@ export function Popover({
   }, [initialProfiles, initialStatus, skipFirstRunCheck]);
 
   const visible = profiles.slice(0, 8);
+  const active = profiles.find((p) => p.id === activeId);
 
   async function onApply(id: ProfileId) {
     try {
       await applyProfile(id);
       setActiveId(id);
     } catch {
-      // Errors surface as toasts in Phase 7+ — silent for the shell.
+      // Errors surface as toasts in a future polish pass.
     }
   }
 
@@ -74,24 +75,29 @@ export function Popover({
 
   return (
     <div role="dialog" aria-label="Mira controller" className="popover">
-      <header className="connection-bar">
-        <span aria-hidden="true">{status.connected ? "●" : "○"} </span>
-        <span>{status.connected ? "Connected" : "Disconnected"}</span>
+      <header className="popover__bar">
+        <span className="popover__status">
+          <span className="popover__status-glyph" aria-hidden="true">
+            {status.connected ? "●" : "○"}
+          </span>
+          {status.connected ? "Connected" : "Disconnected"}
+        </span>
+        <span className="t-eyebrow">Mira</span>
       </header>
 
-      {activeId && (
-        <section aria-label="Active profile" className="active-chip">
-          <strong>
-            {profiles.find((p) => p.id === activeId)?.name ?? activeId}
-          </strong>
+      {active && (
+        <section aria-label="Active profile" className="popover__active">
+          <div className="popover__active-label">Active profile</div>
+          <div className="popover__active-name">{active.name}</div>
         </section>
       )}
 
-      <section aria-label="Profiles" className="profile-grid">
+      <section aria-label="Profiles" className="popover__grid">
         {visible.map((p) => (
           <button
             key={p.id}
             type="button"
+            className="btn"
             data-active={p.id === activeId}
             onClick={() => onApply(p.id)}
           >
@@ -100,8 +106,12 @@ export function Popover({
         ))}
       </section>
 
-      <footer className="quick-actions">
-        <button type="button" onClick={() => forceRefresh().catch(() => {})}>
+      <footer className="popover__actions">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => forceRefresh().catch(() => {})}
+        >
           Force full refresh
         </button>
       </footer>

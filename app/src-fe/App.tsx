@@ -3,6 +3,7 @@ import { Editor } from "./windows/Editor";
 import { Settings } from "./windows/Settings";
 import "./styles/tokens.css";
 import "./styles/reset.css";
+import "./styles/components.css";
 
 // Single SPA, three windows. Tauri spawns each WebviewWindow with a
 // distinct `?window=` query param; the backend code in lib.rs is the

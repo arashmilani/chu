@@ -1,12 +1,10 @@
-/* Minimal reset. We don't normalize; we just zero what bites. */
+/* Form-control inheritance + image defaults — the rest of the reset
+ * lives in tokens.css alongside the design tokens. */
 
 input,
 select,
 textarea {
   font: inherit;
-}
-
-a {
   color: inherit;
 }
 

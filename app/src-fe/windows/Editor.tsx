@@ -5,7 +5,6 @@ import { listProfiles, updateProfileSettings } from "../ipc";
 import type { Profile, ProfileSettings } from "../ipc/types";
 
 // Two-pane shell: profile list on the left, editor form on the right.
-// Stays minimal here — the slider machinery lands in Phase 8.
 export function Editor() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -25,31 +24,29 @@ export function Editor() {
 
   return (
     <div className="editor">
-      <nav aria-label="Profiles" className="rail">
+      <nav aria-label="Profiles" className="editor__rail">
         <ul>
           {profiles.map((p) => (
             <li key={p.id}>
               <button
                 type="button"
+                className="btn"
                 data-active={p.id === selectedId}
                 onClick={() => setSelectedId(p.id)}
               >
                 {p.name}
-                {p.builtIn ? " (built-in)" : ""}
               </button>
             </li>
           ))}
         </ul>
       </nav>
 
-      <section aria-label="Profile editor" className="pane">
+      <section aria-label="Profile editor" className="editor__pane">
         {selected ? (
           <>
             <h1>{selected.name}</h1>
             {selected.builtIn && (
-              <p>
-                Built-in presets are read-only — duplicate this one to edit.
-              </p>
+              <span className="editor__readonly">Built-in · read only</span>
             )}
             <SettingsForm
               key={selected.id}

@@ -1,82 +1,183 @@
-/* Design tokens — spec §9.5: e-ink-friendly UI.
+/* Design tokens — spec §9.5 (e-ink-friendly UI).
  *
- * Pure black on pure white. No shadows, no gradients, no translucency.
- * Active states use bold borders or solid fills, not background tints.
- * Color is never load-bearing; status always pairs a glyph and a label.
+ * The visual language is pure black on pure white with hard borders.
+ * "Constrained palette" does not mean "unstyled HTML": typography,
+ * spacing, alignment, and interactive states are intentional.
+ *
+ * Inspirations: Linear's quick-switcher in monochrome, IBM Plex
+ * specimen sheets, Are.na, architecture portfolios.
  */
 
 :root {
-  /* Color — only black and white, no grays. */
+  /* Color. Only pure black and pure white reach the page; a single
+   * muted token exists for disabled state. */
   --fg: #000;
   --bg: #fff;
   --fg-inverse: #fff;
   --bg-inverse: #000;
-  /* A muted token kept *only* for disabled-state text. Used sparingly;
-   * everything important is solid black on solid white. */
-  --fg-disabled: #888;
+  --fg-disabled: #6b6b6b;
 
-  /* Borders — 1px hard, 2px for emphasis or focus. No shadows. */
+  /* Borders. 1px chrome, 2px emphasis/focus. Never shadows. */
   --border-width: 1px;
   --border-emphasis: 2px;
   --border: var(--border-width) solid var(--fg);
   --border-emphasis-style: var(--border-emphasis) solid var(--fg);
 
-  /* Spacing — multiples of 4 with the tray popover sized for one
-   * thumb. ≥40×40px hit targets per spec. */
+  /* Spacing — 4px rhythm. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Hit targets per spec — ≥40 buttons, ≥44 list rows. */
   --hit-target: 40px;
   --row-height: 44px;
 
-  /* Type — system stack at 15/17px. No icon fonts. */
+  /* Type scale. System sans, deliberate sizes. */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-body: 15px;
-  --font-ui: 17px;
-  --line-height: 1.4;
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --font-size-display: 26px;
+  --font-size-h1: 20px;
+  --font-size-h2: 16px;
+  --font-size-body: 15px;
+  --font-size-ui: 13px;
+  --font-size-mono: 13px;
+
+  --line-height-tight: 1.2;
+  --line-height-body: 1.5;
+  --tracking-tight: -0.01em;
+  --tracking-uppercase: 0.08em;
+
+  /* Layout. */
+  --content-max: 720px;
+  --popover-width: 360px;
+  --rail-width: 220px;
 }
 
-* {
+/* Reset just enough for predictable layout — not a normalization. */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html,
-body {
+body,
+#root {
   margin: 0;
   padding: 0;
+  height: 100%;
+}
+
+body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-sans);
-  font-size: var(--font-body);
-  line-height: var(--line-height);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+dl {
+  margin: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+  padding: 0;
 }
 
 button {
   font: inherit;
-  color: var(--fg);
-  background: var(--bg);
-  border: var(--border);
-  padding: var(--space-2) var(--space-3);
-  min-height: var(--hit-target);
-  cursor: pointer;
+  color: inherit;
 }
 
-button:focus-visible {
+a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: var(--border);
+}
+
+a:hover {
+  border-bottom-width: var(--border-emphasis);
+}
+
+/* Typography utilities. */
+
+.t-display {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.t-h1 {
+  font-size: var(--font-size-h1);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.t-h2 {
+  font-size: var(--font-size-h2);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+}
+
+.t-eyebrow {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-uppercase);
+}
+
+.t-meta {
+  font-size: var(--font-size-ui);
+  line-height: var(--line-height-body);
+}
+
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Focus is always functional, never decorative. */
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
   outline: var(--border-emphasis-style);
   outline-offset: 2px;
-}
-
-button:disabled {
-  color: var(--fg-disabled);
-  cursor: not-allowed;
-}
-
-[data-active="true"] {
-  background: var(--bg-inverse);
-  color: var(--fg-inverse);
 }
