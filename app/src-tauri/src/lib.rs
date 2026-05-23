@@ -173,6 +173,26 @@ fn list_devices() -> Vec<crate::mira::discovery::DeviceInfo> {
 }
 
 #[tauri::command]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn udev_rule_text() -> &'static str {
+    // The exact rule from spec §12.2.
+    "SUBSYSTEM==\"hidraw\", ATTRS{idVendor}==\"0416\", ATTRS{idProduct}==\"5020\", \
+     MODE=\"0660\", GROUP=\"plugdev\", TAG+=\"uaccess\"\n"
+}
+
+#[tauri::command]
+fn udev_rule_present() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        std::path::Path::new("/etc/udev/rules.d/70-mira.rules").exists()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        true
+    }
+}
+
+#[tauri::command]
 fn select_device(
     state: State<'_, Arc<AppState>>,
     app: AppHandle,
@@ -530,6 +550,8 @@ pub fn run() {
             capture_as_found,
             list_devices,
             select_device,
+            udev_rule_text,
+            udev_rule_present,
             open_editor,
             open_settings,
             close_popover,
