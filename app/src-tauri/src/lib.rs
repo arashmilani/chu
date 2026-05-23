@@ -266,7 +266,7 @@ fn open_settings_window(app: &AppHandle) -> Result<(), tauri::Error> {
         window.set_focus()?;
         return Ok(());
     }
-    WebviewWindowBuilder::new(
+    let window = WebviewWindowBuilder::new(
         app,
         WINDOW_SETTINGS,
         WebviewUrl::App("index.html?window=settings".into()),
@@ -274,6 +274,17 @@ fn open_settings_window(app: &AppHandle) -> Result<(), tauri::Error> {
     .title("Mira — Settings")
     .inner_size(820.0, 600.0)
     .build()?;
+
+    // Tray app: closing Settings hides the window, it doesn't quit
+    // the process. The user explicitly quits via the tray menu.
+    let hide_target = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = hide_target.hide();
+        }
+    });
+
     Ok(())
 }
 
