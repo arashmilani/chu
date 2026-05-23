@@ -5,6 +5,47 @@ This is a detailed, TDD-first build plan for the app described in
 built phase by phase, each phase landing on `main` only when its test suite
 is green and its exit criteria are met.
 
+## Current implementation status
+
+| Phase | Status      | Tests           | Notes                                                              |
+| ----- | ----------- | --------------- | ------------------------------------------------------------------ |
+| 0     | ✅ Complete | scaffold        | Tauri 2 + React 19 + TS, CI matrix, README                         |
+| 1     | ✅ Complete | 31 Rust tests   | All encoders, transport (mock + hidapi), discovery, coalescer, NAK |
+| 2     | ✅ Complete | 28 Rust tests   | Profile + 6 presets + AsFound + Session::apply + Store CRUD        |
+| 3     | ✅ Complete | 7 Rust tests    | Atomic writes, v0→v1 migration, corruption recovery                |
+| 4     | ✅ Complete | 23 Rust tests   | AppState, typed AppError, list/apply/refresh/status/CRUD commands  |
+| 5     | 🟨 Partial  | 10 Rust tests   | Binding model + spec §8.1 defaults; OS register/unregister TBD     |
+| 6     | ✅ Complete | 7 vitest specs  | Tokens, IPC, hooks (focus trap + positioning), three window shells |
+| 7     | 🟨 Partial  | (in popover)    | Popover renders against IPC; tray integration + multi-window TBD   |
+| 8     | ✅ Complete | 5 vitest specs  | SettingsForm with all 9 settings via native HTML inputs            |
+| 9     | ⬜ Deferred | —               | Settings window content (general/hotkeys/device/about panes)       |
+| 10    | ⬜ Deferred | —               | First-run experience                                               |
+| 11    | ⬜ Deferred | —               | Multi-device picker                                                |
+| 12    | ⬜ Deferred | —               | Build/packaging/signing per-OS                                     |
+| 13    | ⬜ Deferred | —               | Perf budgets + a11y audit                                          |
+
+**Totals:** 100 Rust unit tests + 18 frontend specs, all green; `cargo
+clippy --all-targets -- -D warnings`, `cargo fmt --check`, `pnpm lint`,
+`pnpm typecheck`, `pnpm format:check` all pass.
+
+The deferred phases each need work that's better done with the actual
+device, a real Tauri runtime, and code-signing certs in hand — none of
+those constraints applied during initial implementation. They reuse
+the existing domain + command layer unchanged; each is a UI/wiring
+exercise on top.
+
+### Implementation-order divergences
+
+- **Phase 7 first commits landed inside Phase 6.** The popover shell
+  was the natural first component to render once tokens and IPC were
+  in place. The remaining Phase 7 tasks (tray icon, system positioning,
+  multi-window orchestration) require live Tauri runtime work and are
+  tracked separately.
+- **Phase 5 OS-side registration deferred.** The binding model and
+  defaults are unit-testable; the actual register/unregister calls
+  against `tauri-plugin-global-shortcut` are runtime-only and land
+  with the rest of the Tauri plugin wiring.
+
 ---
 
 ## 1. Working Method
