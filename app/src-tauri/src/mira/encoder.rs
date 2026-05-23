@@ -22,7 +22,8 @@ mod opcode {
 /// Refresh modes exposed by the device. Naming follows the spec's
 /// two-option surface (`a2 | direct`) — internally `direct` maps to
 /// the `gray_update` opcode value (0x02) used by `mira-js`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum RefreshMode {
     /// Fast binary refresh, good for typing latency.
     A2,
