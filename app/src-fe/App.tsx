@@ -1,6 +1,7 @@
 import { Popover } from "./windows/Popover";
 import { Editor } from "./windows/Editor";
 import { Settings } from "./windows/Settings";
+import { DevPreview } from "./dev-preview";
 import "./styles/tokens.css";
 import "./styles/reset.css";
 import "./styles/components.css";
@@ -18,6 +19,13 @@ export function readWindowKind(search: string = ""): WindowKind {
 }
 
 function App() {
+  if (
+    typeof window !== "undefined" &&
+    window.location.search.includes("preview=1")
+  ) {
+    return <DevPreview />;
+  }
+
   const kind =
     typeof window === "undefined"
       ? "popover"

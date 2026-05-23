@@ -4,12 +4,20 @@ import { SettingsForm } from "../components/SettingsForm";
 import { listProfiles, updateProfileSettings } from "../ipc";
 import type { Profile, ProfileSettings } from "../ipc/types";
 
+interface EditorProps {
+  /** Preview / test hook — skips the IPC fetch. */
+  initialProfiles?: Profile[];
+}
+
 // Two-pane shell: profile list on the left, editor form on the right.
-export function Editor() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export function Editor({ initialProfiles }: EditorProps = {}) {
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? []);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialProfiles?.[0]?.id ?? null,
+  );
 
   useEffect(() => {
+    if (initialProfiles !== undefined) return;
     listProfiles()
       .then((ps) => {
         setProfiles(ps);
@@ -18,7 +26,7 @@ export function Editor() {
         }
       })
       .catch(() => {});
-  }, [selectedId]);
+  }, [initialProfiles, selectedId]);
 
   const selected = profiles.find((p) => p.id === selectedId);
 
