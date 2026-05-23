@@ -25,6 +25,7 @@ struct Inner {
     session: Session,
     transport: Option<Arc<dyn HidTransport>>,
     config_path: Option<PathBuf>,
+    first_run: bool,
 }
 
 impl AppState {
@@ -40,12 +41,16 @@ impl AppState {
                 session: Session::new(),
                 transport: None,
                 config_path: None,
+                first_run: false,
             }),
         }
     }
 
-    /// Build AppState from a config file on disk.
+    /// Build AppState from a config file on disk. Records whether the
+    /// file existed pre-load — callers use that to trigger the
+    /// first-run welcome flow.
     pub fn load_from_disk(path: PathBuf) -> Result<Self, persistence::PersistenceError> {
+        let existed_before = path.exists();
         let config = persistence::load_from(&path, OffsetDateTime::now_utc())?;
         let store = ProfileStore::with_profiles(config.profiles.clone());
         Ok(Self {
@@ -55,8 +60,41 @@ impl AppState {
                 session: Session::new(),
                 transport: None,
                 config_path: Some(path),
+                first_run: !existed_before,
             }),
         })
+    }
+
+    pub fn is_first_run(&self) -> bool {
+        self.inner.lock().expect("app state poisoned").first_run
+    }
+
+    /// Mark the first-run flow as completed so the welcome card stops
+    /// showing on subsequent app launches. Persists by writing the
+    /// current config to disk (which forces config file creation,
+    /// making future loads not-first-run).
+    pub fn complete_first_run(&self) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        inner.first_run = false;
+        self.persist(&inner);
+    }
+
+    /// Capture the device's current settings into the AsFound preset
+    /// (spec §7.1). The argument is what the caller observed on the
+    /// device — typically inferred from the last apply, since the
+    /// vendor firmware doesn't always support reading state back.
+    pub fn capture_as_found(&self, snapshot: ProfileSettings) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        let now = OffsetDateTime::now_utc();
+        let profile = crate::domain::profile::as_found_profile_from(snapshot, now);
+        // Replace any existing AsFound entry.
+        inner
+            .config
+            .profiles
+            .retain(|p| p.id != profile.id);
+        inner.config.profiles.push(profile);
+        inner.store = ProfileStore::with_profiles(inner.config.profiles.clone());
+        self.persist(&inner);
     }
 
     pub fn attach_transport(&self, transport: Arc<dyn HidTransport>) {
@@ -456,7 +494,7 @@ mod tests {
     fn set_hotkey_with_none_removes_the_slot() {
         let state = AppState::in_memory();
         state.set_hotkey("profile1".into(), None);
-        assert!(state.app_settings().hotkeys.get("profile1").is_none());
+        assert!(!state.app_settings().hotkeys.contains_key("profile1"));
     }
 
     #[test]
@@ -468,6 +506,81 @@ mod tests {
         let h = state.app_settings().hotkeys;
         assert_eq!(h.get("profile1").unwrap(), "Ctrl+Alt+1");
         assert_eq!(h.get("refresh").unwrap(), "Ctrl+Alt+Shift+R");
+    }
+
+    #[test]
+    fn first_run_true_when_loading_a_missing_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let state = AppState::load_from_disk(path).unwrap();
+        assert!(state.is_first_run());
+    }
+
+    #[test]
+    fn first_run_false_when_config_already_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        // Pre-create.
+        std::fs::write(&path, b"{\"version\":1,\"profiles\":[]}").unwrap();
+        let state = AppState::load_from_disk(path).unwrap();
+        assert!(!state.is_first_run());
+    }
+
+    #[test]
+    fn complete_first_run_flips_the_flag_and_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let state = AppState::load_from_disk(path.clone()).unwrap();
+        assert!(state.is_first_run());
+        state.complete_first_run();
+        assert!(!state.is_first_run());
+
+        let reloaded = AppState::load_from_disk(path).unwrap();
+        assert!(!reloaded.is_first_run());
+    }
+
+    #[test]
+    fn capture_as_found_adds_a_seventh_profile() {
+        let state = AppState::in_memory();
+        assert_eq!(state.list_profiles().len(), 6);
+        let snap = ProfileSettings {
+            refresh_mode: crate::mira::encoder::RefreshMode::Direct,
+            speed: 5,
+            contrast: 10,
+            dither_mode: 1,
+            white_filter: 0,
+            black_filter: 0,
+            cold_light: 0,
+            warm_light: 0,
+        };
+        state.capture_as_found(snap);
+        let profiles = state.list_profiles();
+        assert_eq!(profiles.len(), 7);
+        let as_found = profiles
+            .iter()
+            .find(|p| p.name == "As-found")
+            .expect("AsFound captured");
+        assert_eq!(as_found.settings, snap);
+    }
+
+    #[test]
+    fn capture_as_found_twice_replaces_not_appends() {
+        let state = AppState::in_memory();
+        let s1 = BuiltInPreset::Read.settings();
+        let s2 = BuiltInPreset::Speed.settings();
+        state.capture_as_found(s1);
+        state.capture_as_found(s2);
+        let profiles = state.list_profiles();
+        let count = profiles.iter().filter(|p| p.name == "As-found").count();
+        assert_eq!(count, 1);
+        assert_eq!(
+            profiles
+                .iter()
+                .find(|p| p.name == "As-found")
+                .unwrap()
+                .settings,
+            s2,
+        );
     }
 
     #[test]

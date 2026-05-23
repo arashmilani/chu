@@ -150,6 +150,21 @@ fn app_version() -> String {
 }
 
 #[tauri::command]
+fn is_first_run(state: State<'_, Arc<AppState>>) -> bool {
+    state.is_first_run()
+}
+
+#[tauri::command]
+fn complete_first_run(state: State<'_, Arc<AppState>>) {
+    state.complete_first_run();
+}
+
+#[tauri::command]
+fn capture_as_found(state: State<'_, Arc<AppState>>, snapshot: ProfileSettings) {
+    state.capture_as_found(snapshot);
+}
+
+#[tauri::command]
 fn open_editor(app: AppHandle) -> Result<(), AppError> {
     show_or_create(&app, WINDOW_EDITOR).map_err(|e| AppError::internal(e.to_string()))
 }
@@ -438,6 +453,9 @@ pub fn run() {
             set_hotkey,
             reset_hotkeys,
             app_version,
+            is_first_run,
+            complete_first_run,
+            capture_as_found,
             open_editor,
             open_settings,
             close_popover,

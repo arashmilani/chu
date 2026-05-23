@@ -80,6 +80,18 @@ export async function appVersion(): Promise<string> {
   return invoke<string>("app_version");
 }
 
+export async function isFirstRun(): Promise<boolean> {
+  return invoke<boolean>("is_first_run");
+}
+
+export async function completeFirstRun(): Promise<void> {
+  await invoke<void>("complete_first_run");
+}
+
+export async function captureAsFound(snapshot: ProfileSettings): Promise<void> {
+  await invoke<void>("capture_as_found", { snapshot });
+}
+
 export function onProfileApplied(
   handler: (payload: { profileId: ProfileId }) => void,
 ): Promise<UnlistenFn> {

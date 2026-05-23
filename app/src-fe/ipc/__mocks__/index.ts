@@ -96,6 +96,18 @@ export async function appVersion(): Promise<string> {
   return "0.1.0-test";
 }
 
+let _firstRun = false;
+export function __setFirstRun(value: boolean) {
+  _firstRun = value;
+}
+export async function isFirstRun(): Promise<boolean> {
+  return _firstRun;
+}
+export async function completeFirstRun(): Promise<void> {
+  _firstRun = false;
+}
+export async function captureAsFound(): Promise<void> {}
+
 export async function onProfileApplied() {
   return () => {};
 }

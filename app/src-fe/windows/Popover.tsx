@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
+import { Welcome } from "../components/Welcome";
 import {
   applyProfile,
   forceRefresh,
   getDeviceStatus,
+  isFirstRun,
   listProfiles,
 } from "../ipc";
 import type { DeviceStatus, Profile, ProfileId } from "../ipc/types";
@@ -12,6 +14,8 @@ interface PopoverProps {
   initialProfiles?: Profile[];
   initialStatus?: DeviceStatus;
   initialActiveId?: ProfileId | null;
+  /** Skip the first-run check entirely. Test hook. */
+  skipFirstRunCheck?: boolean;
 }
 
 // The everyday surface. Connection bar at top, active-profile chip,
@@ -21,12 +25,14 @@ export function Popover({
   initialProfiles,
   initialStatus,
   initialActiveId = null,
+  skipFirstRunCheck = false,
 }: PopoverProps) {
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? []);
   const [status, setStatus] = useState<DeviceStatus>(
     initialStatus ?? { connected: false },
   );
   const [activeId, setActiveId] = useState<ProfileId | null>(initialActiveId);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     if (initialProfiles === undefined) {
@@ -39,7 +45,12 @@ export function Popover({
         .then(setStatus)
         .catch(() => {});
     }
-  }, [initialProfiles, initialStatus]);
+    if (!skipFirstRunCheck) {
+      isFirstRun()
+        .then(setShowWelcome)
+        .catch(() => {});
+    }
+  }, [initialProfiles, initialStatus, skipFirstRunCheck]);
 
   const visible = profiles.slice(0, 8);
 
@@ -50,6 +61,15 @@ export function Popover({
     } catch {
       // Errors surface as toasts in Phase 7+ — silent for the shell.
     }
+  }
+
+  if (showWelcome) {
+    return (
+      <Welcome
+        deviceConnected={status.connected}
+        onDismiss={() => setShowWelcome(false)}
+      />
+    );
   }
 
   return (
