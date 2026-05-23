@@ -13,6 +13,7 @@ mod opcode {
     pub const SET_REFRESH_MODE: u8 = 0x02;
     pub const SET_SPEED: u8 = 0x04;
     pub const SET_CONTRAST: u8 = 0x05;
+    pub const SET_DITHER_MODE: u8 = 0x09;
 }
 
 /// Refresh modes exposed by the device. Naming follows the spec's
@@ -58,6 +59,15 @@ pub fn encode_set_refresh_mode(mode: RefreshMode) -> Vec<u8> {
 pub fn encode_set_contrast(contrast: u8) -> Vec<u8> {
     let clamped = contrast.clamp(0, 15);
     vec![USB_REPORT_ID, opcode::SET_CONTRAST, clamped]
+}
+
+/// Encode `set_dither_mode`. Value is clamped to [0..=3].
+///
+/// 0 = off, 1 = Bayer, 2 = Floyd-Steinberg, 3 = custom (poorly
+/// documented; surface but expect surprises).
+pub fn encode_set_dither_mode(mode: u8) -> Vec<u8> {
+    let clamped = mode.clamp(0, 3);
+    vec![USB_REPORT_ID, opcode::SET_DITHER_MODE, clamped]
 }
 
 #[cfg(test)]
@@ -107,5 +117,22 @@ mod tests {
     fn set_contrast_clamps_above_range_to_fifteen() {
         assert_eq!(encode_set_contrast(16), vec![0x00, 0x05, 15]);
         assert_eq!(encode_set_contrast(255), vec![0x00, 0x05, 15]);
+    }
+
+    #[test]
+    fn set_dither_mode_covers_full_range() {
+        for n in 0..=3u8 {
+            assert_eq!(
+                encode_set_dither_mode(n),
+                vec![0x00, 0x09, n],
+                "dither={n}",
+            );
+        }
+    }
+
+    #[test]
+    fn set_dither_mode_clamps_above_range_to_three() {
+        assert_eq!(encode_set_dither_mode(4), vec![0x00, 0x09, 3]);
+        assert_eq!(encode_set_dither_mode(255), vec![0x00, 0x09, 3]);
     }
 }
