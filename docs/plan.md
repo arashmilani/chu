@@ -104,8 +104,12 @@ window. Reasoning:
 
 The Settings window keeps everything else: a new Profiles tab hosts
 the full editor (chip selector + Duplicate/Reset/Delete + nine-setting
-form), and the General / Hotkeys / Device / About tabs are unchanged.
-First-run is now silent — As-found capture still happens on initial
+form, plus inline rename for custom profiles and a live save
+indicator). The Devices tab was dropped — single-device users got
+nothing from it, the backend already picks the first connected Mira,
+and apply-last-profile-on-connect became a default rather than a
+toggle. Tabs are now Profiles / General / Hotkeys / About.
+First-run is silent — As-found capture still happens on initial
 device connection.
 
 ### Behavioural divergence: editable built-in presets

@@ -208,6 +208,12 @@ In addition, a sixth pseudo-profile, **"As-found"**, is generated on first
 connect by reading the device's current settings. It lets the user revert to
 whatever the device was set to before this app first touched it.
 
+On device connect — cold start or hot-plug — the last-active profile
+is re-applied automatically so the panel always restores to the
+user's most recent setup. There is no toggle for this; an earlier
+spec draft had one, but in practice "remember what I last picked"
+is the only sensible default, and a setting just added clicks.
+
 ### 7.2 Custom profiles
 
 Users can:
@@ -250,7 +256,7 @@ defaults, and GNOME/KDE default keybindings.
 | Switch to profile 3 | ⌃⌥3              | Ctrl+Alt+3       |                |
 | Switch to profile 4 | ⌃⌥4              | Ctrl+Alt+4       |                |
 | Switch to profile 5 | ⌃⌥5              | Ctrl+Alt+5       |                |
-| Force full refresh  | ⌃⌥⇧R             | Ctrl+Alt+Shift+R | See note below |
+| Refresh             | ⌃⌥⇧R             | Ctrl+Alt+Shift+R | See note below |
 
 Notes on the choices:
 
@@ -316,7 +322,7 @@ menu contents, top to bottom:
 
 1. **Profile items** — every profile in order, with a checkmark next
    to the currently active one. Click to apply.
-2. **Force full refresh** — disabled when no device is connected.
+2. **Refresh** — disabled when no device is connected.
 3. **Settings…** — opens the only window in the app.
 4. **Quit Mira.**
 
@@ -327,19 +333,30 @@ by the platform.
 ### 9.2 Settings window (the only screen)
 
 A single resizable window opened from the tray's "Settings…" item.
-Five tabs along the left rail:
+Closing the window hides it; the tray icon is the persistent
+surface — the user quits explicitly from there. Four tabs along
+the left rail:
 
 - **Profiles** — horizontal chip list of every profile; selecting one
-  loads it into the editor below. Each chip toggles the active editing
-  target. Action bar: **Duplicate** (always present), and either
-  **Reset to defaults** (built-ins) or **Delete** (custom). The
-  editor is the full nine-setting form (refresh mode + seven sliders).
+  loads it into the editor below. Each chip toggles the active
+  editing target. Custom profile names are inline-editable in the
+  header (Enter commits, Escape reverts); built-in names stay fixed.
+  Action bar: **Duplicate** (always present), and either **Reset to
+  defaults** (built-ins) or **Delete** (custom). The editor is the
+  full nine-setting form (refresh mode + seven sliders). Edits
+  auto-save per slider event with a live "Saving…"/"Saved"
+  indicator, and a leading+trailing throttle (~80 ms) pushes the
+  preset to the device live while sliding so the user sees the
+  effect on the panel as they drag.
 - **General** — Launch at login toggle.
 - **Hotkeys** — Every spec §8.1 slot with an inline recorder per row
   and a "Reset hotkeys to defaults" button at the bottom.
-- **Device** — Apply-last-profile-on-connect toggle, plus a radio
-  list of every detected Mira (the multi-device picker).
 - **About** — version, license, source link.
+
+There is no Devices tab. The backend picks the first connected
+Mira; for users with multiple Miras, multi-device selection has
+been deferred (the IPC commands are still in place for a future
+surface).
 
 ### 9.3 First run
 
