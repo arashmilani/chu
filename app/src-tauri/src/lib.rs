@@ -19,8 +19,8 @@ type SharedHidApi = Arc<Mutex<hidapi::HidApi>>;
 
 use crate::commands::{AppError, AppState};
 use crate::domain::hotkeys::{
-    default_bindings, Binding, SLOT_PROFILE_1, SLOT_PROFILE_2, SLOT_PROFILE_3, SLOT_PROFILE_4,
-    SLOT_PROFILE_5, SLOT_REFRESH,
+    Binding, SLOT_PROFILE_1, SLOT_PROFILE_2, SLOT_PROFILE_3, SLOT_PROFILE_4, SLOT_PROFILE_5,
+    SLOT_REFRESH,
 };
 use crate::domain::profile::{Profile, ProfileId, ProfileSettings};
 use crate::hotkeys::{binding_to_shortcut, HotkeyManager};
@@ -207,7 +207,7 @@ fn reset_hotkeys(state: State<'_, Arc<AppState>>, app: AppHandle) {
             manager.take(&slot);
         }
     }
-    let _ = register_default_shortcuts(&app);
+    let _ = register_saved_shortcuts(&app);
 }
 
 #[tauri::command]
@@ -578,21 +578,62 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 // -- Hotkeys ---------------------------------------------------------
 
-fn register_default_shortcuts(app: &AppHandle) -> bool {
+/// Register the user's saved per-slot bindings with the OS. Used at
+/// startup and after `reset_hotkeys` (which resets state to defaults
+/// first, so this picks them up too). Iterating saved state — not
+/// `default_bindings()` — is what makes custom bindings actually fire
+/// after the app restarts: registration there used to use the spec
+/// defaults, so a user-rebound chord persisted to disk and was shown
+/// in Settings on restart, but the OS hotkey table still pointed at
+/// the default chord and the custom one was inert until the user
+/// re-saved it.
+fn register_saved_shortcuts(app: &AppHandle) -> bool {
+    let state = match app.try_state::<Arc<AppState>>() {
+        Some(s) => s,
+        None => return false,
+    };
     let manager = match app.try_state::<Arc<HotkeyManager>>() {
         Some(m) => m,
         None => return false,
     };
     let global = app.global_shortcut();
+    let bindings = state.app_settings().hotkeys;
+
+    // Only slots `dispatch_hotkey` knows how to route. Anything else
+    // (e.g. the retired `openPopover` slot still in legacy config
+    // files) would register globally without doing anything, just
+    // shadowing the chord for other apps.
+    const KNOWN: &[&str] = &[
+        SLOT_PROFILE_1,
+        SLOT_PROFILE_2,
+        SLOT_PROFILE_3,
+        SLOT_PROFILE_4,
+        SLOT_PROFILE_5,
+        SLOT_REFRESH,
+    ];
 
     let mut all_ok = true;
-    for (slot, binding) in default_bindings() {
-        match binding_to_shortcut(&binding) {
-            Some(shortcut) => match global.register(shortcut) {
-                Ok(()) => manager.set(slot, shortcut),
-                Err(_) => all_ok = false,
-            },
-            None => all_ok = false,
+    for slot in KNOWN {
+        let Some(text) = bindings.get(*slot) else {
+            continue;
+        };
+        let parsed = match Binding::parse(text) {
+            Ok(b) => b,
+            Err(_) => {
+                all_ok = false;
+                continue;
+            }
+        };
+        let shortcut = match binding_to_shortcut(&parsed) {
+            Some(s) => s,
+            None => {
+                all_ok = false;
+                continue;
+            }
+        };
+        match global.register(shortcut) {
+            Ok(()) => manager.set(*slot, shortcut),
+            Err(_) => all_ok = false,
         }
     }
     let _ = refresh_tray(app);
@@ -670,7 +711,7 @@ pub fn run() {
 
                 let handle = app.handle().clone();
                 build_tray(&handle)?;
-                let _ = register_default_shortcuts(&handle);
+                let _ = register_saved_shortcuts(&handle);
                 let _ = try_attach_selected_device(&state, &hid, &handle);
                 spawn_device_watcher(state.clone(), hid.clone(), handle.clone());
                 Ok(())
