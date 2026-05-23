@@ -103,10 +103,7 @@ mod tests {
     fn serializes_as_kind_and_message_object() {
         let err = AppError::not_found("profile missing");
         let json = serde_json::to_string(&err).unwrap();
-        assert_eq!(
-            json,
-            r#"{"kind":"not-found","message":"profile missing"}"#
-        );
+        assert_eq!(json, r#"{"kind":"not-found","message":"profile missing"}"#);
     }
 
     #[test]

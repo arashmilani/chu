@@ -82,8 +82,12 @@ impl Binding {
 impl fmt::Display for Binding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Canonical modifier order: Ctrl, Alt, Shift, Cmd.
-        const ORDER: [Modifier; 4] =
-            [Modifier::Ctrl, Modifier::Alt, Modifier::Shift, Modifier::Cmd];
+        const ORDER: [Modifier; 4] = [
+            Modifier::Ctrl,
+            Modifier::Alt,
+            Modifier::Shift,
+            Modifier::Cmd,
+        ];
         for m in ORDER {
             if self.modifiers.contains(&m) {
                 write!(

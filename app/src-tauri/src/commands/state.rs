@@ -111,11 +111,7 @@ impl AppState {
     /// attached.
     pub fn apply_profile(&self, id: &ProfileId) -> Result<Vec<Vec<u8>>, ApplyError> {
         let mut inner = self.inner.lock().expect("app state poisoned");
-        let profile = inner
-            .store
-            .find(id)
-            .cloned()
-            .ok_or(ApplyError::NotFound)?;
+        let profile = inner.store.find(id).cloned().ok_or(ApplyError::NotFound)?;
         let frames = inner.session.apply(profile.settings);
 
         if let Some(transport) = inner.transport.clone() {
@@ -134,20 +130,18 @@ impl AppState {
 
     pub fn force_refresh(&self) -> Result<(), ApplyError> {
         let inner = self.inner.lock().expect("app state poisoned");
-        let transport = inner
-            .transport
-            .clone()
-            .ok_or(ApplyError::Device(
-                crate::mira::transport::TransportError::Disconnected,
-            ))?;
+        let transport = inner.transport.clone().ok_or(ApplyError::Device(
+            crate::mira::transport::TransportError::Disconnected,
+        ))?;
         drop(inner);
         let frame = crate::mira::encoder::encode_refresh();
-        transport
-            .write_feature(&frame)
-            .map_err(ApplyError::Device)
+        transport.write_feature(&frame).map_err(ApplyError::Device)
     }
 
-    pub fn duplicate(&self, id: &ProfileId) -> Result<ProfileId, crate::domain::store::ProfileError> {
+    pub fn duplicate(
+        &self,
+        id: &ProfileId,
+    ) -> Result<ProfileId, crate::domain::store::ProfileError> {
         let mut inner = self.inner.lock().expect("app state poisoned");
         let now = OffsetDateTime::now_utc();
         let new_id = inner.store.duplicate(id, now)?;
@@ -306,10 +300,7 @@ mod tests {
         assert_eq!(state.list_profiles().len(), 7);
 
         state.rename(&new_id, "My setup").unwrap();
-        assert!(state
-            .list_profiles()
-            .iter()
-            .any(|p| p.name == "My setup"));
+        assert!(state.list_profiles().iter().any(|p| p.name == "My setup"));
 
         state.delete(&new_id).unwrap();
         assert_eq!(state.list_profiles().len(), 6);

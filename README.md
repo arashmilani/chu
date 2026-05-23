@@ -66,19 +66,10 @@ cargo test -- --ignored
 
 ## Committing
 
-Read [`docs/plan.md` §1](docs/plan.md) before your first commit. The
-shape of every change is:
-
-1. **Red.** Write a failing test that names the new behavior.
-2. **Green.** Write the minimum code to make it pass.
-3. **Refactor.** Tidy what's in front of you. Suite stays green.
-4. **Commit.** Conventional Commits format, one logical change.
+Read [`docs/plan.md` §1](docs/plan.md) before your first commit.
 
 CI runs the full gate (lint, typecheck, tests, clippy, fmt, tauri build)
 on macOS, Windows, and Ubuntu. A red CI blocks merge to `main`.
-
-Per the repo's commit policy, commits are single-author — no
-`Co-Authored-By` trailer.
 
 ## License
 

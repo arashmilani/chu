@@ -7,7 +7,7 @@ use crate::commands::error::AppError;
 use crate::commands::state::AppState;
 use crate::domain::profile::{Profile, ProfileId, ProfileSettings};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyOutcome {
     pub profile_id: ProfileId,
@@ -23,9 +23,7 @@ pub fn list_profiles(state: &AppState) -> Vec<Profile> {
 
 pub fn apply_profile(state: &AppState, id: ProfileId) -> Result<ApplyOutcome, AppError> {
     let frames = state.apply_profile(&id).map_err(|e| match e {
-        crate::commands::state::ApplyError::NotFound => {
-            AppError::not_found("profile not found")
-        }
+        crate::commands::state::ApplyError::NotFound => AppError::not_found("profile not found"),
         crate::commands::state::ApplyError::Device(t) => t.into(),
     })?;
     Ok(ApplyOutcome {
@@ -38,11 +36,7 @@ pub fn duplicate_profile(state: &AppState, id: ProfileId) -> Result<ProfileId, A
     Ok(state.duplicate(&id)?)
 }
 
-pub fn rename_profile(
-    state: &AppState,
-    id: ProfileId,
-    new_name: String,
-) -> Result<(), AppError> {
+pub fn rename_profile(state: &AppState, id: ProfileId, new_name: String) -> Result<(), AppError> {
     Ok(state.rename(&id, &new_name)?)
 }
 
