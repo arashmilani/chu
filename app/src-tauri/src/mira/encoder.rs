@@ -135,4 +135,21 @@ mod tests {
         assert_eq!(encode_set_dither_mode(4), vec![0x00, 0x09, 3]);
         assert_eq!(encode_set_dither_mode(255), vec![0x00, 0x09, 3]);
     }
+
+    #[test]
+    fn set_refresh_mode_a2_maps_to_three() {
+        assert_eq!(
+            encode_set_refresh_mode(RefreshMode::A2),
+            vec![0x00, 0x02, 0x03]
+        );
+    }
+
+    #[test]
+    fn set_refresh_mode_direct_maps_to_gray_update_two() {
+        // Spec's "direct = full grayscale" maps to mira-js's gray_update (0x02).
+        assert_eq!(
+            encode_set_refresh_mode(RefreshMode::Direct),
+            vec![0x00, 0x02, 0x02]
+        );
+    }
 }
