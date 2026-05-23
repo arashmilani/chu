@@ -91,6 +91,10 @@ export async function setHotkey(
 
 export async function resetHotkeys(): Promise<void> {}
 
+export async function suspendHotkeys(): Promise<void> {}
+
+export async function resumeHotkeys(): Promise<void> {}
+
 export async function appVersion(): Promise<string> {
   return "0.1.0-test";
 }

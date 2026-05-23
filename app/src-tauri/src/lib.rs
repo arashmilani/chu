@@ -153,6 +153,50 @@ fn set_hotkey(
     Ok(())
 }
 
+/// Pause all OS-level hotkey registrations so the frontend hotkey
+/// recorder can actually receive key chords. While suspended, the
+/// in-memory hotkey config (per-slot bindings) is untouched — only
+/// the OS registration is dropped. `resume_hotkeys` re-registers
+/// from the current config.
+#[tauri::command]
+fn suspend_hotkeys(app: AppHandle) {
+    let _ = app.global_shortcut().unregister_all();
+    if let Some(manager) = app.try_state::<Arc<HotkeyManager>>() {
+        for slot in manager.registered_slots() {
+            manager.take(&slot);
+        }
+    }
+    let _ = refresh_tray(&app);
+}
+
+/// Re-register OS-level hotkeys from the saved per-slot bindings.
+/// Skips slots already in the manager (e.g. a binding committed via
+/// `set_hotkey` while suspended). Best-effort: a slot that fails to
+/// register is left out — the next attempt to set it surfaces the
+/// failure to the user.
+#[tauri::command]
+fn resume_hotkeys(state: State<'_, Arc<AppState>>, app: AppHandle) {
+    let bindings = state.app_settings().hotkeys;
+    let global = app.global_shortcut();
+    if let Some(manager) = app.try_state::<Arc<HotkeyManager>>() {
+        let already: std::collections::HashSet<String> =
+            manager.registered_slots().into_iter().collect();
+        for (slot, text) in &bindings {
+            if already.contains(slot) {
+                continue;
+            }
+            if let Ok(parsed) = Binding::parse(text) {
+                if let Some(shortcut) = binding_to_shortcut(&parsed) {
+                    if global.register(shortcut).is_ok() {
+                        manager.set(slot.clone(), shortcut);
+                    }
+                }
+            }
+        }
+    }
+    let _ = refresh_tray(&app);
+}
+
 #[tauri::command]
 fn reset_hotkeys(state: State<'_, Arc<AppState>>, app: AppHandle) {
     let global = app.global_shortcut();
@@ -666,6 +710,8 @@ pub fn run() {
             set_launch_at_login,
             set_hotkey,
             reset_hotkeys,
+            suspend_hotkeys,
+            resume_hotkeys,
             app_version,
             is_first_run,
             complete_first_run,

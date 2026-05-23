@@ -77,6 +77,14 @@ export async function resetHotkeys(): Promise<void> {
   await invoke<void>("reset_hotkeys");
 }
 
+export async function suspendHotkeys(): Promise<void> {
+  await invoke<void>("suspend_hotkeys");
+}
+
+export async function resumeHotkeys(): Promise<void> {
+  await invoke<void>("resume_hotkeys");
+}
+
 export async function appVersion(): Promise<string> {
   return invoke<string>("app_version");
 }
