@@ -74,6 +74,32 @@ describe("Settings", () => {
     ).toBeInTheDocument();
   });
 
+  it("seeds the chip selection from the currently active profile", async () => {
+    render(
+      <Settings
+        initialAppSettings={baseSettings}
+        initialProfiles={sampleProfiles}
+        initialActiveProfileId="coding"
+      />,
+    );
+    const codingChip = await screen.findByRole("button", { name: /^Coding$/ });
+    const readChip = screen.getByRole("button", { name: /^Read$/ });
+    expect(codingChip.getAttribute("data-active")).toBe("true");
+    expect(readChip.getAttribute("data-active")).toBe("false");
+  });
+
+  it("falls back to the first chip when no active profile is recorded", async () => {
+    render(
+      <Settings
+        initialAppSettings={baseSettings}
+        initialProfiles={sampleProfiles}
+        initialActiveProfileId={null}
+      />,
+    );
+    const readChip = await screen.findByRole("button", { name: /^Read$/ });
+    expect(readChip.getAttribute("data-active")).toBe("true");
+  });
+
   it("Profiles tab shows Duplicate + Reset on a built-in selection", async () => {
     render(
       <Settings

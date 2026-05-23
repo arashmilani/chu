@@ -75,6 +75,14 @@ export async function getAppSettings(): Promise<AppSettings> {
   return _settings;
 }
 
+let _activeProfileId: ProfileId | null = null;
+export function __setActiveProfileId(id: ProfileId | null) {
+  _activeProfileId = id;
+}
+export async function getActiveProfileId(): Promise<ProfileId | null> {
+  return _activeProfileId;
+}
+
 export async function setLaunchAtLogin(value: boolean): Promise<void> {
   _settings = { ..._settings, launchAtLogin: value };
 }

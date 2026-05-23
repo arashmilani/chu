@@ -7,6 +7,7 @@ import {
   appVersion,
   deleteProfile,
   duplicateProfile,
+  getActiveProfileId,
   getAppSettings,
   listProfiles,
   renameProfile,
@@ -32,12 +33,14 @@ interface SettingsProps {
   initialAppSettings?: AppSettings;
   initialProfiles?: Profile[];
   initialVersion?: string;
+  initialActiveProfileId?: ProfileId | null;
 }
 
 export function Settings({
   initialAppSettings,
   initialProfiles,
   initialVersion,
+  initialActiveProfileId,
 }: SettingsProps = {}) {
   const [tab, setTab] = useState<Tab>("Profiles");
   const [settings, setSettings] = useState<AppSettings | null>(
@@ -45,6 +48,9 @@ export function Settings({
   );
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? []);
   const [version, setVersion] = useState<string>(initialVersion ?? "");
+  const [activeProfileId, setActiveProfileId] = useState<ProfileId | null>(
+    initialActiveProfileId ?? null,
+  );
 
   useEffect(() => {
     if (initialAppSettings === undefined) {
@@ -62,7 +68,17 @@ export function Settings({
         .then(setVersion)
         .catch(() => {});
     }
-  }, [initialAppSettings, initialProfiles, initialVersion]);
+    if (initialActiveProfileId === undefined) {
+      getActiveProfileId()
+        .then(setActiveProfileId)
+        .catch(() => {});
+    }
+  }, [
+    initialAppSettings,
+    initialProfiles,
+    initialVersion,
+    initialActiveProfileId,
+  ]);
 
   async function refreshProfiles() {
     try {
@@ -116,6 +132,7 @@ export function Settings({
         {tab === "Profiles" && (
           <ProfilesPane
             profiles={profiles}
+            activeProfileId={activeProfileId}
             onChange={refreshProfiles}
             onPatchProfileSettings={patchProfileSettings}
           />
@@ -137,27 +154,30 @@ export function Settings({
 
 interface ProfilesPaneProps {
   profiles: Profile[];
+  activeProfileId: ProfileId | null;
   onChange: () => Promise<void> | void;
   onPatchProfileSettings: (id: ProfileId, settings: ProfileSettings) => void;
 }
 
 function ProfilesPane({
   profiles,
+  activeProfileId,
   onChange,
   onPatchProfileSettings,
 }: ProfilesPaneProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(
-    profiles[0]?.id ?? null,
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Derive a valid selection: if the user's pick is gone (deletion,
-  // first load), show the first profile. We don't write back into
-  // state here — the next user click does that. Keeps the effect
-  // purely a "user picked" channel.
+  // Selection priority: user's explicit click > backend's last-active
+  // profile > first profile. The middle tier resolves async (Settings
+  // fetches it after mount), so we derive instead of seeding state —
+  // that way the active chip lights up the moment the id arrives,
+  // even if profiles loaded first and we briefly showed profile[0].
   const activeId =
     selectedId && profiles.some((p) => p.id === selectedId)
       ? selectedId
-      : (profiles[0]?.id ?? null);
+      : activeProfileId && profiles.some((p) => p.id === activeProfileId)
+        ? activeProfileId
+        : (profiles[0]?.id ?? null);
   const selected = profiles.find((p) => p.id === activeId);
 
   async function onDuplicate() {

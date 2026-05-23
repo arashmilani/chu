@@ -62,6 +62,10 @@ export async function getAppSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_app_settings");
 }
 
+export async function getActiveProfileId(): Promise<ProfileId | null> {
+  return invoke<ProfileId | null>("get_active_profile_id");
+}
+
 export async function setLaunchAtLogin(value: boolean): Promise<void> {
   await invoke<void>("set_launch_at_login", { value });
 }

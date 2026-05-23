@@ -116,6 +116,11 @@ fn get_app_settings(state: State<'_, Arc<AppState>>) -> commands::state::AppSett
 }
 
 #[tauri::command]
+fn get_active_profile_id(state: State<'_, Arc<AppState>>) -> Option<ProfileId> {
+    state.active_profile_id()
+}
+
+#[tauri::command]
 fn set_launch_at_login(state: State<'_, Arc<AppState>>, value: bool) {
     state.set_launch_at_login(value);
 }
@@ -728,6 +733,7 @@ pub fn run() {
             get_device_status,
             force_refresh,
             get_app_settings,
+            get_active_profile_id,
             set_launch_at_login,
             set_hotkey,
             reset_hotkeys,
