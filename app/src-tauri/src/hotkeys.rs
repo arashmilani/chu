@@ -129,6 +129,19 @@ impl HotkeyManager {
             .expect("hotkey manager poisoned")
             .remove(slot)
     }
+
+    /// Reverse lookup: which slot owns the given `Shortcut`? Used by
+    /// the global-shortcut plugin's handler to route a chord press to
+    /// the action attached to its slot — including chords the user
+    /// has rebound away from the spec defaults.
+    pub fn slot_for_shortcut(&self, shortcut: &Shortcut) -> Option<String> {
+        self.registered
+            .lock()
+            .expect("hotkey manager poisoned")
+            .iter()
+            .find(|(_, s)| *s == shortcut)
+            .map(|(slot, _)| slot.clone())
+    }
 }
 
 #[cfg(test)]
@@ -188,5 +201,23 @@ mod tests {
         let removed = m.take("profile1").unwrap();
         assert_eq!(removed, shortcut);
         assert!(m.registered_slots().is_empty());
+    }
+
+    #[test]
+    fn slot_for_shortcut_finds_a_custom_binding() {
+        // Reverse lookup must work for chords the user rebound to
+        // something other than the spec defaults — the old approach
+        // matched against default_bindings() and silently failed for
+        // every custom binding.
+        let m = HotkeyManager::new();
+        let custom = Shortcut::new(
+            Some(Modifiers::META | Modifiers::CONTROL | Modifiers::SHIFT),
+            Code::KeyR,
+        );
+        m.set("refresh", custom);
+        assert_eq!(m.slot_for_shortcut(&custom), Some("refresh".to_string()));
+
+        let other = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyR);
+        assert_eq!(m.slot_for_shortcut(&other), None);
     }
 }

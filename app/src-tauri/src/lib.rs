@@ -630,26 +630,6 @@ fn dispatch_hotkey(app: &AppHandle, slot: &str) {
     }
 }
 
-fn slot_for_shortcut(
-    manager: &HotkeyManager,
-    shortcut: &tauri_plugin_global_shortcut::Shortcut,
-) -> Option<String> {
-    let snapshot = manager
-        .registered_slots()
-        .into_iter()
-        .filter_map(|slot| {
-            default_bindings()
-                .into_iter()
-                .find(|(s, _)| *s == slot)
-                .and_then(|(_, b)| binding_to_shortcut(&b))
-                .map(|s| (slot, s))
-        })
-        .collect::<Vec<_>>();
-    snapshot
-        .into_iter()
-        .find(|(_, s)| s == shortcut)
-        .map(|(slot, _)| slot)
-}
 
 // -- Entry point -----------------------------------------------------
 
@@ -671,7 +651,7 @@ pub fn run() {
                         if event.state() != ShortcutState::Pressed {
                             return;
                         }
-                        if let Some(slot) = slot_for_shortcut(&manager, shortcut) {
+                        if let Some(slot) = manager.slot_for_shortcut(shortcut) {
                             dispatch_hotkey(app, &slot);
                         }
                     }
