@@ -7,44 +7,83 @@ is green and its exit criteria are met.
 
 ## Current implementation status
 
-| Phase | Status      | Tests           | Notes                                                              |
-| ----- | ----------- | --------------- | ------------------------------------------------------------------ |
-| 0     | ✅ Complete | scaffold        | Tauri 2 + React 19 + TS, CI matrix, README                         |
-| 1     | ✅ Complete | 31 Rust tests   | All encoders, transport (mock + hidapi), discovery, coalescer, NAK |
-| 2     | ✅ Complete | 28 Rust tests   | Profile + 6 presets + AsFound + Session::apply + Store CRUD        |
-| 3     | ✅ Complete | 7 Rust tests    | Atomic writes, v0→v1 migration, corruption recovery                |
-| 4     | ✅ Complete | 23 Rust tests   | AppState, typed AppError, list/apply/refresh/status/CRUD commands  |
-| 5     | 🟨 Partial  | 10 Rust tests   | Binding model + spec §8.1 defaults; OS register/unregister TBD     |
-| 6     | ✅ Complete | 7 vitest specs  | Tokens, IPC, hooks (focus trap + positioning), three window shells |
-| 7     | 🟨 Partial  | (in popover)    | Popover renders against IPC; tray integration + multi-window TBD   |
-| 8     | ✅ Complete | 5 vitest specs  | SettingsForm with all 9 settings via native HTML inputs            |
-| 9     | ⬜ Deferred | —               | Settings window content (general/hotkeys/device/about panes)       |
-| 10    | ⬜ Deferred | —               | First-run experience                                               |
-| 11    | ⬜ Deferred | —               | Multi-device picker                                                |
-| 12    | ⬜ Deferred | —               | Build/packaging/signing per-OS                                     |
-| 13    | ⬜ Deferred | —               | Perf budgets + a11y audit                                          |
+| Phase | Status      | Tests           | Notes                                                                            |
+| ----- | ----------- | --------------- | -------------------------------------------------------------------------------- |
+| 0     | ✅ Complete | scaffold        | Tauri 2 + React 19 + TS, CI matrix, README                                       |
+| 1     | ✅ Complete | 31 Rust tests   | All encoders, transport (mock + hidapi), discovery, coalescer, NAK               |
+| 2     | ✅ Complete | 28 Rust tests   | Profile + 6 presets + AsFound + Session::apply + Store CRUD                      |
+| 3     | ✅ Complete | 7 Rust tests    | Atomic writes, v0→v1 migration, corruption recovery                              |
+| 4     | ✅ Complete | 23 Rust tests   | AppState, typed AppError, list/apply/refresh/status/CRUD commands                |
+| 5     | ✅ Complete | 16 Rust tests   | Binding model + defaults + OS register/unregister + rebind + reset               |
+| 6     | ✅ Complete | 7 vitest specs  | Tokens, IPC, hooks (focus trap + positioning), three window shells               |
+| 7     | ✅ Complete | (in-app)        | Tray icon, popover/editor/settings windows, click toggle, menu, single-SPA route |
+| 8     | ✅ Complete | 5 vitest specs  | SettingsForm with all 9 settings via native HTML inputs                          |
+| 9     | ✅ Complete | 5 vitest specs  | General / Hotkeys / Device / About panes wired end-to-end                        |
+| 10    | ✅ Complete | 5+3 specs       | First-run flag, welcome card, three-step flow, as-found capture                  |
+| 11    | ✅ Complete | 2 vitest specs  | Discovery enumeration + picker in Device settings + multi-detected event         |
+| 12    | 🟨 Partial  | —               | Per-OS bundle configs, udev installer helpers, release workflow; signing TBD     |
+| 13    | ✅ Complete | (build)         | Lazy-loaded Editor/Settings chunks; a11y review notes below                      |
 
-**Totals:** 100 Rust unit tests + 18 frontend specs, all green; `cargo
+**Totals:** 121 Rust unit tests + 32 frontend specs, all green; `cargo
 clippy --all-targets -- -D warnings`, `cargo fmt --check`, `pnpm lint`,
-`pnpm typecheck`, `pnpm format:check` all pass.
+`pnpm typecheck`, `pnpm format:check` all pass. Production bundle:
+1.6KB Settings chunk + 1.1KB Editor chunk + 63KB main (gzipped), CSS
+2.4KB gzipped.
 
-The deferred phases each need work that's better done with the actual
-device, a real Tauri runtime, and code-signing certs in hand — none of
-those constraints applied during initial implementation. They reuse
-the existing domain + command layer unchanged; each is a UI/wiring
-exercise on top.
+### Phase 12 remaining
+
+What's still needed beyond what's in `app/src-tauri/tauri.conf.json`
+and `.github/workflows/release.yml`:
+
+- **macOS signing/notarization** — release workflow reads the secrets
+  but the certs themselves still need to be provisioned (Apple
+  Developer ID for the DMG, app-specific password for notarization).
+- **Windows signing** — likewise reads `WINDOWS_CERTIFICATE` /
+  `WINDOWS_CERTIFICATE_PASSWORD`; needs an actual code-signing cert.
+- **LSUIElement plist merge** — `src-tauri/Info.plist` carries the
+  menu-bar-only flag, but Tauri 2's bundler doesn't merge it
+  automatically. The release workflow needs a small post-bundle step
+  (e.g. `plutil -insert LSUIElement -bool true …`) until the upstream
+  schema gains a first-class field.
+- **Linux udev installer UI** — the `udev_rule_text` /
+  `udev_rule_present` commands are in place; the AppImage first-run
+  prompt that calls them with a `pkexec`-elevated write isn't wired
+  in yet.
+
+### Phase 13 a11y review
+
+What was verified during the polish pass; what's still rough:
+
+- ✅ Every interactive element has a visible label (text, `aria-label`,
+  or wrapping `<label>`).
+- ✅ `role="dialog"`/`role="tab"`/`role="tabpanel"` used appropriately;
+  `aria-selected` mirrors the active tab.
+- ✅ Pure-keyboard click on tabs works; `:focus-visible` ring is
+  non-decorative (2px black outset).
+- ✅ Status never relies on color alone — a `●`/`○` glyph pairs with
+  the "Connected"/"Disconnected" label per spec §9.5.
+- ✅ Hit targets ≥40×40px for buttons and 44px row height for list
+  rows, set via tokens.
+- 🟨 Roving-tabindex for the Settings tab list isn't implemented; tabs
+  are reachable individually but Left/Right arrow navigation between
+  them follows the default `<button>` behaviour rather than the
+  WAI-ARIA tablist pattern.
+- 🟨 Focus is not explicitly moved into the Welcome card when it
+  appears; the first focusable element receives focus only on the
+  user's first Tab press.
+- 🟨 No live-region announces device connect / disconnect — the tray
+  title still surfaces the state, but a screen reader on the desktop
+  won't see the change until the user re-opens the popover.
 
 ### Implementation-order divergences
 
 - **Phase 7 first commits landed inside Phase 6.** The popover shell
   was the natural first component to render once tokens and IPC were
   in place. The remaining Phase 7 tasks (tray icon, system positioning,
-  multi-window orchestration) require live Tauri runtime work and are
-  tracked separately.
-- **Phase 5 OS-side registration deferred.** The binding model and
-  defaults are unit-testable; the actual register/unregister calls
-  against `tauri-plugin-global-shortcut` are runtime-only and land
-  with the rest of the Tauri plugin wiring.
+  multi-window orchestration) landed afterwards.
+- **Phase 5 OS-side registration landed alongside Phase 7.** The
+  global-shortcut plugin needs the same Tauri runtime wiring as the
+  tray, so they shipped together rather than as separate phases.
 
 ---
 

@@ -2,15 +2,20 @@
 // they can be inspected without a Tauri backend. Not shipped with the
 // app — used during development to verify the visual design.
 //
-// Mount at `?preview=1` via the App router (or by visiting
-// /dev-preview.html directly).
+// Mount at `?preview=1` via the App router. Editor/Settings are
+// lazy-loaded here too so the production popover chunk isn't pulled
+// into one big bundle.
+
+import { lazy, Suspense } from "react";
 
 import { Popover } from "./windows/Popover";
-import { Editor } from "./windows/Editor";
-import { Settings } from "./windows/Settings";
-import "./styles/tokens.css";
-import "./styles/reset.css";
-import "./styles/components.css";
+
+const Editor = lazy(() =>
+  import("./windows/Editor").then((m) => ({ default: m.Editor })),
+);
+const Settings = lazy(() =>
+  import("./windows/Settings").then((m) => ({ default: m.Settings })),
+);
 
 const sampleProfiles = [
   preset("read", "Read", { speed: 3, contrast: 9, ditherMode: 1 }),
@@ -74,8 +79,20 @@ export function DevPreview() {
   );
   const which = params.get("which") ?? "popover";
 
-  if (which === "editor") return <Editor initialProfiles={sampleProfiles} />;
-  if (which === "settings") return <Settings />;
+  if (which === "editor") {
+    return (
+      <Suspense fallback={null}>
+        <Editor initialProfiles={sampleProfiles} />
+      </Suspense>
+    );
+  }
+  if (which === "settings") {
+    return (
+      <Suspense fallback={null}>
+        <Settings />
+      </Suspense>
+    );
+  }
   return (
     <Popover
       initialProfiles={sampleProfiles}
