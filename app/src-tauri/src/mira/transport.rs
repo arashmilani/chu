@@ -39,7 +39,13 @@ impl From<hidapi::HidError> for TransportError {
 /// the exact byte sequence the driver produced.
 #[derive(Default)]
 pub struct MockTransport {
-    writes: std::sync::Mutex<Vec<Vec<u8>>>,
+    state: std::sync::Mutex<MockState>,
+}
+
+#[derive(Default)]
+struct MockState {
+    writes: Vec<Vec<u8>>,
+    next_results: std::collections::VecDeque<Result<(), TransportError>>,
 }
 
 impl MockTransport {
@@ -48,17 +54,28 @@ impl MockTransport {
     }
 
     pub fn writes(&self) -> Vec<Vec<u8>> {
-        self.writes.lock().expect("mock transport poisoned").clone()
+        self.state.lock().expect("mock transport poisoned").writes.clone()
+    }
+
+    /// Queue a single result that the next `write_feature` call will
+    /// return. Useful for scripting NAKs or disconnects in tests.
+    pub fn queue_result(&self, result: Result<(), TransportError>) {
+        self.state
+            .lock()
+            .expect("mock transport poisoned")
+            .next_results
+            .push_back(result);
     }
 }
 
 impl HidTransport for MockTransport {
     fn write_feature(&self, report: &[u8]) -> Result<(), TransportError> {
-        self.writes
-            .lock()
-            .expect("mock transport poisoned")
-            .push(report.to_vec());
-        Ok(())
+        let mut state = self.state.lock().expect("mock transport poisoned");
+        let result = state.next_results.pop_front().unwrap_or(Ok(()));
+        // Record the attempt regardless of outcome so tests can
+        // verify what was sent before the error surfaced.
+        state.writes.push(report.to_vec());
+        result
     }
 
     fn read_feature(&self, _buf: &mut [u8]) -> Result<usize, TransportError> {
@@ -126,5 +143,30 @@ mod tests {
             mock.read_feature(&mut buf),
             Err(TransportError::Unsupported)
         ));
+    }
+
+    #[test]
+    fn queued_nak_is_returned_from_next_write() {
+        let mock = MockTransport::new();
+        mock.queue_result(Err(TransportError::Nak));
+        let err = mock.write_feature(&[0x00, 0x04, 0x07]).unwrap_err();
+        assert!(matches!(err, TransportError::Nak));
+        // The attempted write is still recorded so tests can verify
+        // *what* was sent when the NAK happened.
+        assert_eq!(mock.writes(), vec![vec![0x00, 0x04, 0x07]]);
+    }
+
+    #[test]
+    fn queued_results_apply_in_order() {
+        let mock = MockTransport::new();
+        mock.queue_result(Ok(()));
+        mock.queue_result(Err(TransportError::Disconnected));
+        mock.queue_result(Ok(()));
+        assert!(mock.write_feature(&[0x00, 0x01]).is_ok());
+        assert!(matches!(
+            mock.write_feature(&[0x00, 0x01]),
+            Err(TransportError::Disconnected)
+        ));
+        assert!(mock.write_feature(&[0x00, 0x01]).is_ok());
     }
 }

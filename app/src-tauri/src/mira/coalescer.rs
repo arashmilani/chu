@@ -165,4 +165,15 @@ mod tests {
         assert_eq!(flushed, 1);
         assert_eq!(mock.writes(), vec![encode_set_speed(5)]);
     }
+
+    #[test]
+    fn flush_propagates_nak_from_transport() {
+        let (mock, coalescer, t0) = fixture();
+        mock.queue_result(Err(TransportError::Nak));
+        coalescer.submit(encode_set_speed(5), t0);
+        let err = coalescer
+            .flush_if_quiet(t0 + Duration::from_millis(50))
+            .unwrap_err();
+        assert!(matches!(err, TransportError::Nak));
+    }
 }
