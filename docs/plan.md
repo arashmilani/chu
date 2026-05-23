@@ -153,9 +153,20 @@ Everything ships under `/app/`. Repo root stays clean:
 
 - **Vitest** as the test runner (Vite-native, fast).
 - **@testing-library/react** for component tests.
-- **jsdom** environment.
+- **jsdom** environment. We pin `jsdom@^26` for now — the 27/29 line
+  pulled in an ESM-only `@exodus/bytes` transitive dep that
+  `html-encoding-sniffer` still requires synchronously, breaking
+  Vitest worker boot on Node 22.11. Revisit once the toolchain
+  catches up.
 - IPC is faked in tests via a small `ipc/__mocks__/` shim so components
   never know whether they're talking to a real backend.
+- **Lint stack:** flat ESLint config with `@eslint/js`,
+  `typescript-eslint`, `eslint-plugin-react-hooks`, and
+  `eslint-plugin-react-refresh`. `eslint-plugin-react` is intentionally
+  *not* included: its 7.37.x line is incompatible with ESLint 10's
+  context API, and React 19's JSX transform already removes the rules
+  it would have provided. The Vite team's official template made the
+  same call.
 
 ### 3.3 CI gate
 
@@ -228,17 +239,43 @@ networking, no UI, no profiles. Just bytes.
 3. **test+feat(mira): encode set_contrast in [0..=15]**
 4. **test+feat(mira): encode set_dither_mode in [0..=3]**
 5. **test+feat(mira): encode set_refresh_mode (a2 | direct)**
-6. **test+feat(mira): encode set_white_filter in [0..=127]**
-7. **test+feat(mira): encode set_black_filter in [0..=127]**
-8. **test+feat(mira): encode set_cold_light in [0..=254]**
-9. **test+feat(mira): encode set_warm_light in [0..=254]**
-10. **test+feat(mira): encode refresh() one-shot command**
-11. **test+feat(mira): discovery enumerates VID 0x0416 / PID 0x5020**
+6. **test+feat(mira): encode set_color_filter (white + black, combined)**
+   The device exposes whiten-background and deepen-blacks as parameters
+   on a single opcode (0x11), so they're a single encoder taking both
+   values. White is inverted on the wire (`255 - white`); both inputs
+   clamp to spec range `[0..=127]`. Callers tracking only one of the
+   pair must keep the partner value around to resend it. *(Plan
+   divergence: originally specified as two separate `set_white_filter`
+   and `set_black_filter` encoders; consolidated to match the wire
+   protocol from `mira-js`.)*
+7. **test+feat(mira): encode set_cold_light in [0..=254]**
+8. **test+feat(mira): encode set_warm_light in [0..=254]**
+9. **test+feat(mira): encode refresh() one-shot command**
+10. **test+feat(mira): discovery enumerates VID 0x0416 / PID 0x5020**
     With a faked HID enumerator; real-device test ignored.
-12. **test+feat(mira): write coalescer with 16ms window**
+11. **test+feat(mira): write coalescer with 16ms window**
     Rapid `set_speed(3); set_speed(4); set_speed(5)` produces exactly one
     write of value 5.
-13. **test+feat(mira): NAK is surfaced as a typed error**
+12. **test+feat(mira): NAK is surfaced as a typed error**
+
+### Protocol notes (confirmed against `mira-js`)
+
+- **Refresh mode mapping.** The spec exposes two modes (`a2 | direct`)
+  but the device firmware understands three (`direct_update=0x01`,
+  `gray_update=0x02`, `a2=0x03`). Spec's "direct = full grayscale"
+  corresponds to wire value `0x02` (`gray_update`), not `0x01`. The
+  third mode (`direct_update`, black/white fast) isn't exposed in v1.
+- **Speed inversion.** `set_speed(n)` sends `11 - n` on the wire — so
+  spec value 1 (slowest) becomes wire byte `10`, and spec value 7
+  (fastest) becomes wire byte `4`. This matches `mira-js` and is what
+  the device actually expects.
+- **White filter inversion.** `set_color_filter` sends `255 - white`
+  on the wire; black is pass-through. A spec `white_filter` of 0 (no
+  whitening) emits wire byte `0xFF`.
+- **Range narrowing.** `mira-js` accepts `0..=254` for white/black
+  filters, but the spec narrows to `0..=127` because higher values
+  saturate the panel to all-white / all-black with no useful step
+  granularity. Our encoders enforce the narrower spec range.
 
 ---
 
