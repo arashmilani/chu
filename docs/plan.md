@@ -23,8 +23,9 @@ is green and its exit criteria are met.
 | 11    | ✅ Complete | 2 vitest specs  | Discovery enumeration + picker in Device settings + multi-detected event         |
 | 12    | 🟨 Partial  | —               | Per-OS bundle configs, udev installer helpers, release workflow; signing TBD     |
 | 13    | ✅ Complete | (build)         | Lazy-loaded Editor/Settings chunks; a11y review notes below                      |
+| 14    | ✅ Complete | 12 Rust + 3 vitest | Auto-refresh on a2 (spec §9.5) — wall-clock timer (seconds), host-idle gate, config v4 |
 
-**Totals:** 125 Rust unit tests + 19 frontend specs, all green; `cargo
+**Totals:** 138 Rust unit tests + 21 frontend specs, all green; `cargo
 clippy --all-targets -- -D warnings`, `cargo fmt --check`, `pnpm lint`,
 `pnpm typecheck`, `pnpm format:check` all pass. Production bundle is
 back to a single chunk now that there's only one window — the
@@ -669,7 +670,42 @@ v1 multi-device-aware throughout.
 
 ---
 
-## 18. Out-of-Scope Reminders
+## 18. Phase 14 — Auto-refresh on A2
+
+**Goal.** Ship spec [§9.5](specs.md#95-auto-refresh): a periodic full
+refresh that actually helps with ghosting during real typing/scrolling
+use, not just while the user wiggles sliders in the editor.
+
+**Exit criteria.**
+- Default-off toggle in Settings → General with a 5–9999 second
+  interval, default 30. Values below 5 snap up to 5.
+- Background task fires a refresh frame when the active profile is
+  `a2`, ≥N seconds have passed since the last refresh, and the OS
+  reports the user was active within the window.
+- No new OS permission prompts on macOS, Windows, or Linux X11.
+- Config schema migrates forward from v1/v2/v3 without data loss.
+
+### Tasks
+
+1. **chore(deps): add `user-idle` for permission-free host idle reads**
+2. **test+feat(domain): bump Config to v4 with `autoRefreshSeconds`;
+   v1→v2→v3→v4 migration drops the now-dead earlier auto-refresh
+   fields (HID-write counter, minutes-based interval)**
+3. **test+feat(state): `auto_refresh_tick(idle_seconds)` returns
+   true only when feature on + transport + a2 + interval elapsed +
+   user active; switch / manual refresh / reconnect / threshold
+   change all reset the clock**
+4. **feat(app): `spawn_auto_refresh_task` ticks every second,
+   queries `user_idle::UserIdle::get_time`, delegates to AppState**
+5. **feat(ipc): `set_auto_refresh(enabled, seconds)` command +
+   `autoRefreshEnabled`/`autoRefreshSeconds` on `AppSettings`**
+6. **test+feat(ui): General tab gains the toggle + seconds input
+   (disabled while toggle off, snaps to ≥5 on blur), styled
+   `.number-row` per e-ink rules**
+
+---
+
+## 19. Out-of-Scope Reminders
 
 These belong to v2 per [spec §13](specs.md#13-future-work) and must not
 leak into v1 phases:
@@ -685,7 +721,7 @@ If a v1 task starts pulling toward one of these, stop and re-scope.
 
 ---
 
-## 19. Quick Reference — TDD Loop Checklist
+## 20. Quick Reference — TDD Loop Checklist
 
 For every change, big or small:
 

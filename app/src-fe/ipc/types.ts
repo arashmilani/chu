@@ -68,6 +68,8 @@ export const DEFAULT_PROFILE_ID: ProfileId = "coding";
 export interface AppSettings {
   launchAtLogin: boolean;
   hotkeys: Record<string, string>;
+  autoRefreshEnabled: boolean;
+  autoRefreshSeconds: number;
 }
 
 export const HOTKEY_SLOTS: { slot: string; label: string }[] = [

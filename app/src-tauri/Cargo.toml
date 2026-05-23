@@ -26,3 +26,8 @@ time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"
 directories = "5"
 tempfile = "3"
 tokio = { version = "1", features = ["time", "rt"] }
+# Cross-platform "seconds since last user input" — wraps the
+# permission-free OS idle-time APIs (CGEventSource on macOS,
+# GetLastInputInfo on Windows, XScreenSaverQueryInfo on X11). Used by
+# the auto-refresh timer to skip refreshes while the user is AFK.
+user-idle = "0.6"

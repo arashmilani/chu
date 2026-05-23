@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use time::OffsetDateTime;
 
@@ -13,6 +14,7 @@ use crate::domain::persistence::{self, Config};
 use crate::domain::profile::{Profile, ProfileId, ProfileSettings};
 use crate::domain::session::Session;
 use crate::domain::store::ProfileStore;
+use crate::mira::encoder::RefreshMode;
 use crate::mira::transport::HidTransport;
 
 pub struct AppState {
@@ -26,6 +28,14 @@ struct Inner {
     transport: Option<Arc<dyn HidTransport>>,
     config_path: Option<PathBuf>,
     first_run: bool,
+    /// Wall-clock instant of the last refresh sent to the device
+    /// (manual or auto). The periodic auto-refresh task gates on
+    /// `now - last_refresh_at >= auto_refresh_seconds`. Reset on
+    /// disconnect, threshold change, and profile switch so changes
+    /// take effect from "now", not from whenever the previous tally
+    /// started. In-memory only — restarting the app starts the
+    /// clock over.
+    last_refresh_at: Option<Instant>,
 }
 
 impl AppState {
@@ -42,6 +52,7 @@ impl AppState {
                 transport: None,
                 config_path: None,
                 first_run: false,
+                last_refresh_at: None,
             }),
         }
     }
@@ -61,6 +72,7 @@ impl AppState {
                 transport: None,
                 config_path: Some(path),
                 first_run: !existed_before,
+                last_refresh_at: None,
             }),
         })
     }
@@ -88,10 +100,7 @@ impl AppState {
         let now = OffsetDateTime::now_utc();
         let profile = crate::domain::profile::as_found_profile_from(snapshot, now);
         // Replace any existing AsFound entry.
-        inner
-            .config
-            .profiles
-            .retain(|p| p.id != profile.id);
+        inner.config.profiles.retain(|p| p.id != profile.id);
         inner.config.profiles.push(profile);
         inner.store = ProfileStore::with_profiles(inner.config.profiles.clone());
         self.persist(&inner);
@@ -103,12 +112,17 @@ impl AppState {
         // A fresh transport means the device's actual state is
         // unknown; the next apply() will write every field.
         inner.session.invalidate();
+        // Start the auto-refresh clock from the connect moment so a
+        // freshly-connected device gets its first auto-refresh after
+        // a full interval, not immediately.
+        inner.last_refresh_at = Some(Instant::now());
     }
 
     pub fn detach_transport(&self) {
         let mut inner = self.inner.lock().expect("app state poisoned");
         inner.transport = None;
         inner.session.invalidate();
+        inner.last_refresh_at = None;
     }
 
     pub fn is_connected(&self) -> bool {
@@ -150,6 +164,7 @@ impl AppState {
     pub fn apply_profile(&self, id: &ProfileId) -> Result<Vec<Vec<u8>>, ApplyError> {
         let mut inner = self.inner.lock().expect("app state poisoned");
         let profile = inner.store.find(id).cloned().ok_or(ApplyError::NotFound)?;
+        let is_switch = inner.config.last_active_profile_id.as_ref() != Some(id);
         let frames = inner.session.apply(profile.settings);
 
         if let Some(transport) = inner.transport.clone() {
@@ -162,18 +177,30 @@ impl AppState {
             inner.session.invalidate();
         }
         inner.config.last_active_profile_id = Some(id.clone());
+        // Switching to a different profile restarts the auto-refresh
+        // clock: the new profile gets a fresh interval, and we don't
+        // want a switch into an A2 profile to fire immediately if
+        // the previous interval was already exhausted.
+        if is_switch && inner.transport.is_some() {
+            inner.last_refresh_at = Some(Instant::now());
+        }
         self.persist(&inner);
         Ok(frames)
     }
 
     pub fn force_refresh(&self) -> Result<(), ApplyError> {
-        let inner = self.inner.lock().expect("app state poisoned");
+        let mut inner = self.inner.lock().expect("app state poisoned");
         let transport = inner.transport.clone().ok_or(ApplyError::Device(
             crate::mira::transport::TransportError::Disconnected,
         ))?;
-        drop(inner);
         let frame = crate::mira::encoder::encode_refresh();
-        transport.write_feature(&frame).map_err(ApplyError::Device)
+        transport
+            .write_feature(&frame)
+            .map_err(ApplyError::Device)?;
+        // Any successful full refresh — manual or auto — resets the
+        // auto-refresh clock.
+        inner.last_refresh_at = Some(Instant::now());
+        Ok(())
     }
 
     pub fn duplicate(
@@ -224,6 +251,102 @@ impl AppState {
         AppSettings {
             launch_at_login: inner.config.launch_at_login,
             hotkeys: inner.config.hotkeys.clone(),
+            auto_refresh_enabled: inner.config.auto_refresh_enabled,
+            auto_refresh_seconds: inner.config.auto_refresh_seconds,
+        }
+    }
+
+    /// Update the auto-refresh feature flag and threshold in one shot.
+    /// `seconds` is clamped to at least `MIN_AUTO_REFRESH_SECONDS` so
+    /// the threshold can't be set so low it fires constantly. The
+    /// auto-refresh clock is restarted so a freshly-changed threshold
+    /// doesn't trigger an immediate refresh from a stale tally.
+    pub fn set_auto_refresh(&self, enabled: bool, seconds: u32) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        inner.config.auto_refresh_enabled = enabled;
+        inner.config.auto_refresh_seconds =
+            seconds.max(crate::domain::persistence::MIN_AUTO_REFRESH_SECONDS);
+        // Restart the clock either way: switching the feature on
+        // shouldn't backdate the first refresh, and changing the
+        // interval down shouldn't fire instantly.
+        if inner.transport.is_some() {
+            inner.last_refresh_at = Some(Instant::now());
+        } else {
+            inner.last_refresh_at = None;
+        }
+        self.persist(&inner);
+    }
+
+    /// One tick of the periodic auto-refresh task. Returns `true` if a
+    /// refresh frame was actually sent. Designed to be called every
+    /// second or so from a background tokio task; idempotent if the
+    /// preconditions aren't met.
+    ///
+    /// Preconditions: feature enabled, transport attached, active
+    /// profile uses `a2`, last-refresh was ≥ N seconds ago, and the
+    /// OS reports the user was *active* within the last N seconds
+    /// (so we don't refresh an AFK panel where nothing's been
+    /// accumulating ghosting).
+    pub fn auto_refresh_tick(&self, idle_seconds: u64) -> bool {
+        let (transport, log_reason) = {
+            let inner = self.inner.lock().expect("app state poisoned");
+            if !inner.config.auto_refresh_enabled {
+                return false;
+            }
+            let transport = match inner.transport.clone() {
+                Some(t) => t,
+                None => return false,
+            };
+            let active_settings = inner
+                .config
+                .last_active_profile_id
+                .as_ref()
+                .and_then(|id| inner.store.find(id))
+                .map(|p| p.settings);
+            let in_a2 = matches!(
+                active_settings.map(|s| s.refresh_mode),
+                Some(RefreshMode::A2),
+            );
+            if !in_a2 {
+                return false;
+            }
+            let interval_secs = inner.config.auto_refresh_seconds as u64;
+            let elapsed = inner
+                .last_refresh_at
+                .map(|t| t.elapsed().as_secs())
+                .unwrap_or(u64::MAX);
+            if elapsed < interval_secs {
+                return false;
+            }
+            // Active-user gate: if the OS-reported idle time exceeds
+            // the configured interval, the user hasn't been typing or
+            // moving the mouse on this host long enough to accumulate
+            // ghosting worth a refresh. Skip until they come back.
+            if idle_seconds >= interval_secs {
+                return false;
+            }
+            (
+                transport,
+                format!(
+                    "elapsed={}s idle={}s threshold={}s",
+                    elapsed, idle_seconds, inner.config.auto_refresh_seconds,
+                ),
+            )
+        };
+
+        eprintln!("[auto-refresh] firing: {log_reason}");
+        let frame = crate::mira::encoder::encode_refresh();
+        match transport.write_feature(&frame) {
+            Ok(()) => {
+                eprintln!("[auto-refresh] refresh frame sent");
+                let mut inner = self.inner.lock().expect("app state poisoned");
+                inner.last_refresh_at = Some(Instant::now());
+                true
+            }
+            Err(e) => {
+                eprintln!("[auto-refresh] refresh write failed: {e}");
+                false
+            }
         }
     }
 
@@ -346,6 +469,8 @@ impl AppState {
 pub struct AppSettings {
     pub launch_at_login: bool,
     pub hotkeys: std::collections::BTreeMap<String, String>,
+    pub auto_refresh_enabled: bool,
+    pub auto_refresh_seconds: u32,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -573,7 +698,10 @@ mod tests {
     fn set_hotkey_replaces_existing_binding_in_slot() {
         let state = AppState::in_memory();
         state.set_hotkey("profile1".into(), Some("Ctrl+Shift+1".into()));
-        assert_eq!(state.app_settings().hotkeys.get("profile1").unwrap(), "Ctrl+Shift+1");
+        assert_eq!(
+            state.app_settings().hotkeys.get("profile1").unwrap(),
+            "Ctrl+Shift+1"
+        );
     }
 
     #[test]
@@ -681,5 +809,183 @@ mod tests {
         // Reload from disk.
         let reloaded = AppState::load_from_disk(path).unwrap();
         assert_eq!(reloaded.list_profiles().len(), 7);
+    }
+
+    // -- Auto-refresh timer ------------------------------------------
+
+    /// Set both the feature flag and the threshold (in seconds), then
+    /// force the last-refresh-at marker to "long ago" so the next
+    /// tick can fire without waiting in wall-clock time.
+    fn arm_auto_refresh(state: &AppState, seconds: u32) {
+        state.set_auto_refresh(true, seconds);
+        let mut inner = state.inner.lock().unwrap();
+        inner.last_refresh_at = Some(Instant::now() - std::time::Duration::from_secs(60 * 60));
+    }
+
+    /// Push the in-memory last-refresh marker far enough back that
+    /// any practical elapsed check passes. Used after operations that
+    /// reset the clock (apply_profile/switch, set_auto_refresh).
+    fn force_stale_clock(state: &AppState) {
+        let mut inner = state.inner.lock().unwrap();
+        inner.last_refresh_at = Some(Instant::now() - std::time::Duration::from_secs(60 * 60));
+    }
+
+    #[test]
+    fn auto_refresh_defaults_to_off_with_a_sensible_threshold() {
+        let state = AppState::in_memory();
+        let s = state.app_settings();
+        assert!(!s.auto_refresh_enabled);
+        assert_eq!(s.auto_refresh_seconds, 30);
+    }
+
+    #[test]
+    fn set_auto_refresh_clamps_below_minimum_up_to_floor() {
+        let state = AppState::in_memory();
+        state.set_auto_refresh(true, 0);
+        assert_eq!(state.app_settings().auto_refresh_seconds, 5);
+        state.set_auto_refresh(true, 3);
+        assert_eq!(state.app_settings().auto_refresh_seconds, 5);
+        state.set_auto_refresh(true, 5);
+        assert_eq!(state.app_settings().auto_refresh_seconds, 5);
+        state.set_auto_refresh(true, 60);
+        assert_eq!(state.app_settings().auto_refresh_seconds, 60);
+    }
+
+    #[test]
+    fn tick_does_nothing_when_feature_is_off() {
+        let state = AppState::in_memory();
+        let mock = Arc::new(MockTransport::new());
+        state.attach_transport(mock.clone());
+        // active idle = 0s (user just typed)
+        assert!(!state.auto_refresh_tick(0));
+        assert!(mock.writes().is_empty());
+    }
+
+    #[test]
+    fn tick_does_nothing_without_a_transport() {
+        let state = AppState::in_memory();
+        state.set_auto_refresh(true, 30);
+        assert!(!state.auto_refresh_tick(0));
+    }
+
+    #[test]
+    fn tick_does_nothing_when_active_profile_is_direct() {
+        let state = AppState::in_memory();
+        let mock = Arc::new(MockTransport::new());
+        state.attach_transport(mock.clone());
+        arm_auto_refresh(&state, 30);
+        // Switch to a direct-mode profile.
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Read))
+            .unwrap();
+        let writes_before = mock.writes().len();
+
+        assert!(!state.auto_refresh_tick(0));
+        assert_eq!(mock.writes().len(), writes_before);
+    }
+
+    #[test]
+    fn tick_does_nothing_when_user_is_idle_beyond_the_interval() {
+        let state = AppState::in_memory();
+        let mock = Arc::new(MockTransport::new());
+        state.attach_transport(mock.clone());
+        arm_auto_refresh(&state, 30);
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Coding))
+            .unwrap();
+        force_stale_clock(&state);
+        let writes_before = mock.writes().len();
+
+        // User idle 60s, interval 30s → idle ≥ interval → skip.
+        assert!(!state.auto_refresh_tick(60));
+        assert_eq!(mock.writes().len(), writes_before);
+    }
+
+    #[test]
+    fn tick_fires_when_user_is_active_and_interval_elapsed_on_a2() {
+        let state = AppState::in_memory();
+        let mock = Arc::new(MockTransport::new());
+        state.attach_transport(mock.clone());
+        arm_auto_refresh(&state, 30);
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Coding))
+            .unwrap();
+        force_stale_clock(&state);
+        let writes_before = mock.writes().len();
+
+        // User active (idle 5s — just blinked), interval elapsed.
+        assert!(state.auto_refresh_tick(5));
+        let writes_after = mock.writes().len();
+        assert_eq!(writes_after, writes_before + 1);
+        assert_eq!(
+            mock.writes().last().unwrap(),
+            &crate::mira::encoder::encode_refresh()
+        );
+    }
+
+    #[test]
+    fn tick_consumes_the_interval_after_firing() {
+        let state = AppState::in_memory();
+        let mock = Arc::new(MockTransport::new());
+        state.attach_transport(mock.clone());
+        arm_auto_refresh(&state, 30);
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Coding))
+            .unwrap();
+        force_stale_clock(&state);
+        assert!(state.auto_refresh_tick(5));
+        // Immediate second tick — clock just reset, no fire.
+        assert!(!state.auto_refresh_tick(5));
+    }
+
+    #[test]
+    fn force_refresh_resets_the_auto_refresh_clock() {
+        let state = AppState::in_memory();
+        let mock = Arc::new(MockTransport::new());
+        state.attach_transport(mock.clone());
+        arm_auto_refresh(&state, 30);
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Coding))
+            .unwrap();
+        force_stale_clock(&state);
+        state.force_refresh().unwrap();
+        // After manual refresh the clock is "now"; the tick should
+        // no longer fire even though we just had a stale marker.
+        assert!(!state.auto_refresh_tick(5));
+    }
+
+    #[test]
+    fn profile_switch_resets_the_auto_refresh_clock() {
+        let state = AppState::in_memory();
+        let mock = Arc::new(MockTransport::new());
+        state.attach_transport(mock.clone());
+        arm_auto_refresh(&state, 30);
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Coding))
+            .unwrap();
+        force_stale_clock(&state);
+        // Switch to a different profile.
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Speed))
+            .unwrap();
+        // Clock reset by the switch path → no fire on next tick.
+        assert!(!state.auto_refresh_tick(5));
+    }
+
+    #[test]
+    fn attach_transport_resets_the_auto_refresh_clock() {
+        let state = AppState::in_memory();
+        let m1 = Arc::new(MockTransport::new());
+        state.attach_transport(m1);
+        state.set_auto_refresh(true, 30);
+        force_stale_clock(&state);
+        // Reconnect: should reset clock so the post-reconnect
+        // auto-apply doesn't immediately get auto-refreshed on top.
+        let m2 = Arc::new(MockTransport::new());
+        state.attach_transport(m2);
+        state
+            .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Coding))
+            .unwrap();
+        assert!(!state.auto_refresh_tick(5));
     }
 }

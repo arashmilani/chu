@@ -29,7 +29,17 @@ use time::OffsetDateTime;
 use crate::domain::profile::{built_in_profiles, BuiltInPreset, Profile, ProfileId};
 
 /// Current config schema version. Bump when the JSON shape changes.
-pub const CURRENT_VERSION: u32 = 1;
+pub const CURRENT_VERSION: u32 = 4;
+
+/// Smallest interval the user is allowed to pick. Anything below
+/// this fires too often to be useful and gets in the way of typing.
+pub const MIN_AUTO_REFRESH_SECONDS: u32 = 5;
+
+/// Default `autoRefreshSeconds` when the user first turns the
+/// feature on. 30 seconds is short enough to actually clear
+/// accumulated ghosting during fast typing but long enough that the
+/// refresh flash doesn't constantly interrupt.
+pub const DEFAULT_AUTO_REFRESH_SECONDS: u32 = 30;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +56,19 @@ pub struct Config {
     /// detected. `None` means "use the first one we find".
     #[serde(default)]
     pub selected_device_serial: Option<String>,
+    /// Auto-refresh: when on, a background task fires a full refresh
+    /// every `auto_refresh_seconds` seconds while the active profile
+    /// uses `a2` mode AND the user has shown input activity within
+    /// that window (so we don't refresh an idle/AFK display). See
+    /// spec §9.5.
+    #[serde(default)]
+    pub auto_refresh_enabled: bool,
+    #[serde(default = "default_auto_refresh_seconds")]
+    pub auto_refresh_seconds: u32,
+}
+
+fn default_auto_refresh_seconds() -> u32 {
+    DEFAULT_AUTO_REFRESH_SECONDS
 }
 
 impl Default for Config {
@@ -57,6 +80,8 @@ impl Default for Config {
             hotkeys: default_hotkeys(),
             profiles: built_in_profiles(),
             selected_device_serial: None,
+            auto_refresh_enabled: false,
+            auto_refresh_seconds: DEFAULT_AUTO_REFRESH_SECONDS,
         }
     }
 }
@@ -145,13 +170,32 @@ fn migrate(mut cfg: Config, path: &Path) -> Result<Config, PersistenceError> {
     let backup = path.with_file_name(format!("config.v{original_version}.bak"));
     fs::copy(path, &backup)?;
 
-    // Forward migrations live here. v0 -> v1 is the only step today;
-    // v0 is the implicit "no version key" shape so any file with
-    // version == 0 (or missing version) is treated as v0.
+    // Forward migrations live here. Each step bumps `version` by one
+    // and runs any data fixups. `#[serde(default)]` already supplies
+    // sane values for fields added in newer versions, and serde
+    // silently drops fields removed in newer versions on the next
+    // save, so most steps just bump the number.
     if cfg.version == 0 {
-        // v0 -> v1: just bump the version field. No structural change
-        // beyond "we have a version now".
+        // v0 -> v1: introduced a version field. No structural change.
         cfg.version = 1;
+    }
+    if cfg.version == 1 {
+        // v1 -> v2: added a (since-removed) auto-refresh-by-HID-write
+        // counter. The field is gone in v3; serde drops it on save.
+        cfg.version = 2;
+    }
+    if cfg.version == 2 {
+        // v2 -> v3: replaced auto-refresh-by-HID-writes with
+        // auto-refresh-by-minutes (active-user-gated). Both fields
+        // are gone in v4 — serde drops them on save.
+        cfg.version = 3;
+    }
+    if cfg.version == 3 {
+        // v3 -> v4: minutes -> seconds. We deliberately don't map
+        // `autoRefreshMinutes * 60` over: 15 minutes (the old
+        // default) isn't a sensible auto-pick on the new 5+ seconds
+        // floor. Users coming from v3 land on the v4 default (30s).
+        cfg.version = 4;
     }
 
     // Write the migrated config back atomically.
@@ -181,6 +225,10 @@ mod tests {
         assert_eq!(cfg.profiles.len(), 6);
         assert!(!cfg.launch_at_login);
         assert_eq!(cfg.hotkeys.get("profile1").unwrap(), "Ctrl+Alt+1");
+        // Auto-refresh ships off; the threshold is the documented
+        // starting default.
+        assert!(!cfg.auto_refresh_enabled);
+        assert_eq!(cfg.auto_refresh_seconds, DEFAULT_AUTO_REFRESH_SECONDS);
     }
 
     #[test]
@@ -243,7 +291,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.json");
 
-        // Synthesise a v0 file: same shape as v1 but version=0.
+        // Synthesise a v0 file: same shape but version=0.
         let v0 = Config {
             version: 0,
             ..Config::default()
@@ -258,6 +306,72 @@ mod tests {
         // The backup keeps the old version field for forensics.
         let raw_backup: Config = serde_json::from_slice(&fs::read(&backup).unwrap()).unwrap();
         assert_eq!(raw_backup.version, 0);
+    }
+
+    #[test]
+    fn v2_file_with_dead_auto_refresh_hid_writes_field_migrates_forward() {
+        // A real v2 file: had the abandoned `autoRefreshHidWrites`
+        // counter. The v2 -> v3 -> v4 chain drops it; serde
+        // backfills `autoRefreshSeconds` with the v4 default.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let v2_json = r#"{
+            "version": 2,
+            "lastActiveProfileId": "coding",
+            "launchAtLogin": false,
+            "hotkeys": {"profile1": "Ctrl+Alt+1"},
+            "profiles": [],
+            "selectedDeviceSerial": null,
+            "autoRefreshEnabled": true,
+            "autoRefreshHidWrites": 50
+        }"#;
+        fs::write(&path, v2_json).unwrap();
+
+        let migrated = load_from(&path, OffsetDateTime::UNIX_EPOCH).unwrap();
+        assert_eq!(migrated.version, CURRENT_VERSION);
+        // The user's "enabled" preference is preserved.
+        assert!(migrated.auto_refresh_enabled);
+        // v4 default takes over for the now-renamed field.
+        assert_eq!(migrated.auto_refresh_seconds, DEFAULT_AUTO_REFRESH_SECONDS);
+
+        let backup = path.with_file_name("config.v2.bak");
+        assert!(backup.exists());
+
+        // Saved file no longer carries the dead fields.
+        let on_disk: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(on_disk.get("autoRefreshHidWrites").is_none());
+        assert!(on_disk.get("autoRefreshMinutes").is_none());
+        assert_eq!(
+            on_disk.get("autoRefreshSeconds").and_then(|v| v.as_u64()),
+            Some(DEFAULT_AUTO_REFRESH_SECONDS as u64),
+        );
+    }
+
+    #[test]
+    fn v3_file_with_dead_auto_refresh_minutes_field_migrates_to_v4() {
+        // v3 had `autoRefreshMinutes`. We deliberately don't map
+        // minutes -> seconds (15 min ≠ 15 sec); v4 reset to default.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let v3_json = r#"{
+            "version": 3,
+            "lastActiveProfileId": "coding",
+            "launchAtLogin": false,
+            "hotkeys": {"profile1": "Ctrl+Alt+1"},
+            "profiles": [],
+            "selectedDeviceSerial": null,
+            "autoRefreshEnabled": true,
+            "autoRefreshMinutes": 15
+        }"#;
+        fs::write(&path, v3_json).unwrap();
+
+        let migrated = load_from(&path, OffsetDateTime::UNIX_EPOCH).unwrap();
+        assert_eq!(migrated.version, CURRENT_VERSION);
+        assert!(migrated.auto_refresh_enabled);
+        assert_eq!(migrated.auto_refresh_seconds, DEFAULT_AUTO_REFRESH_SECONDS);
+
+        let backup = path.with_file_name("config.v3.bak");
+        assert!(backup.exists());
     }
 
     #[test]

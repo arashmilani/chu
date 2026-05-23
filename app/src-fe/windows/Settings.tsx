@@ -13,6 +13,7 @@ import {
   renameProfile,
   resetHotkeys,
   resetProfileToDefaults,
+  setAutoRefresh,
   setHotkey,
   setLaunchAtLogin,
   updateProfileSettings,
@@ -422,20 +423,89 @@ interface PaneProps {
   onChange: (next: AppSettings) => void;
 }
 
+// Auto-refresh interval bounds (seconds). The floor matches the
+// backend clamp in `domain::persistence::MIN_AUTO_REFRESH_SECONDS`.
+const AUTO_REFRESH_MIN_SECONDS = 5;
+const AUTO_REFRESH_MAX_SECONDS = 9999;
+
 function GeneralPane({ settings, onChange }: PaneProps) {
+  function commitAutoRefresh(enabled: boolean, seconds: number) {
+    const clamped = Math.max(
+      AUTO_REFRESH_MIN_SECONDS,
+      Math.min(
+        AUTO_REFRESH_MAX_SECONDS,
+        Math.floor(seconds) || AUTO_REFRESH_MIN_SECONDS,
+      ),
+    );
+    setAutoRefresh(enabled, clamped).catch(() => {});
+    onChange({
+      ...settings,
+      autoRefreshEnabled: enabled,
+      autoRefreshSeconds: clamped,
+    });
+  }
+
   return (
-    <label className="toggle-row">
-      <input
-        type="checkbox"
-        checked={settings.launchAtLogin}
-        onChange={(e) => {
-          const value = e.currentTarget.checked;
-          setLaunchAtLogin(value).catch(() => {});
-          onChange({ ...settings, launchAtLogin: value });
-        }}
-      />
-      Launch at login
-    </label>
+    <>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={settings.launchAtLogin}
+          onChange={(e) => {
+            const value = e.currentTarget.checked;
+            setLaunchAtLogin(value).catch(() => {});
+            onChange({ ...settings, launchAtLogin: value });
+          }}
+        />
+        Launch at login
+      </label>
+
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={settings.autoRefreshEnabled}
+          onChange={(e) =>
+            commitAutoRefresh(
+              e.currentTarget.checked,
+              settings.autoRefreshSeconds,
+            )
+          }
+        />
+        Auto full refresh on A2 profiles
+      </label>
+
+      <label className="number-row">
+        <span>Refresh every</span>
+        <input
+          type="number"
+          min={AUTO_REFRESH_MIN_SECONDS}
+          max={AUTO_REFRESH_MAX_SECONDS}
+          step={1}
+          aria-label="Seconds between automatic refreshes"
+          disabled={!settings.autoRefreshEnabled}
+          value={settings.autoRefreshSeconds}
+          onChange={(e) => {
+            const next = Number(e.currentTarget.value);
+            // Optimistic local update so the input doesn't lag while
+            // typing; the blur handler clamps and pushes to backend.
+            onChange({
+              ...settings,
+              autoRefreshSeconds: Number.isFinite(next)
+                ? next
+                : AUTO_REFRESH_MIN_SECONDS,
+            });
+          }}
+          onBlur={(e) => {
+            const next = Number(e.currentTarget.value);
+            commitAutoRefresh(
+              settings.autoRefreshEnabled,
+              Number.isFinite(next) ? next : AUTO_REFRESH_MIN_SECONDS,
+            );
+          }}
+        />
+        <span>seconds (skipped while you're idle)</span>
+      </label>
+    </>
   );
 }
 

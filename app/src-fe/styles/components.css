@@ -479,6 +479,47 @@ input[type="radio"]:disabled {
   cursor: pointer;
 }
 
+/* Inline number input sandwiched between two labels, e.g.
+   "Refresh every [15] minutes". Solid border, mono digits, hit-target
+   sized box, dim-but-readable disabled state — matches the e-ink
+   visual rulebook in spec §9.4. */
+.number-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-body);
+}
+
+.number-row input[type="number"] {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+  font-weight: 700;
+  color: var(--fg);
+  background: var(--bg);
+  border: var(--border);
+  min-height: var(--hit-target);
+  /* Wide enough for 4 digits plus the native spinner buttons; the
+     ch unit alone leaves no room for the up/down chevrons. */
+  width: 7ch;
+  padding: 0 var(--space-2);
+  text-align: right;
+}
+
+.number-row input[type="number"]:focus {
+  outline: none;
+  border: var(--border-emphasis-style);
+}
+
+.number-row input[type="number"]:disabled {
+  color: var(--fg-disabled);
+  border-color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+
+.number-row:has(input:disabled) {
+  color: var(--fg-disabled);
+}
+
 /* Fieldset (refresh-mode radio group) */
 fieldset {
   border: var(--border);

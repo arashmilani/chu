@@ -24,6 +24,8 @@ let _settings: AppSettings = {
     refresh: "Ctrl+Alt+Shift+R",
     openPopover: "Ctrl+Alt+Shift+M",
   },
+  autoRefreshEnabled: false,
+  autoRefreshSeconds: 30,
 };
 
 export function __setProfiles(profiles: Profile[]) {
@@ -85,6 +87,17 @@ export async function getActiveProfileId(): Promise<ProfileId | null> {
 
 export async function setLaunchAtLogin(value: boolean): Promise<void> {
   _settings = { ..._settings, launchAtLogin: value };
+}
+
+export async function setAutoRefresh(
+  enabled: boolean,
+  seconds: number,
+): Promise<void> {
+  _settings = {
+    ..._settings,
+    autoRefreshEnabled: enabled,
+    autoRefreshSeconds: Math.max(5, Math.floor(seconds)),
+  };
 }
 
 export async function setHotkey(

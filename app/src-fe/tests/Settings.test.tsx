@@ -50,6 +50,8 @@ const baseSettings = {
     profile1: "Ctrl+Alt+1",
     refresh: "Ctrl+Alt+Shift+R",
   },
+  autoRefreshEnabled: false,
+  autoRefreshSeconds: 30,
 };
 
 describe("Settings", () => {
@@ -156,6 +158,63 @@ describe("Settings", () => {
       name: /launch at login/i,
     });
     expect((toggle as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("General tab disables the auto-refresh interval until the toggle is on", async () => {
+    render(
+      <Settings
+        initialAppSettings={baseSettings}
+        initialProfiles={sampleProfiles}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "General" }));
+    const toggle = await screen.findByRole("checkbox", {
+      name: /auto full refresh/i,
+    });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+
+    const interval = screen.getByRole("spinbutton", {
+      name: /seconds between automatic refreshes/i,
+    }) as HTMLInputElement;
+    expect(interval.disabled).toBe(true);
+    expect(interval.value).toBe("30");
+
+    fireEvent.click(toggle);
+    expect(interval.disabled).toBe(false);
+  });
+
+  it("General tab commits the auto-refresh interval on blur", async () => {
+    render(
+      <Settings
+        initialAppSettings={{ ...baseSettings, autoRefreshEnabled: true }}
+        initialProfiles={sampleProfiles}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "General" }));
+    const interval = (await screen.findByRole("spinbutton", {
+      name: /seconds between automatic refreshes/i,
+    })) as HTMLInputElement;
+
+    fireEvent.change(interval, { target: { value: "45" } });
+    fireEvent.blur(interval);
+    expect(interval.value).toBe("45");
+  });
+
+  it("General tab snaps below-minimum auto-refresh values up to 5 seconds on blur", async () => {
+    render(
+      <Settings
+        initialAppSettings={{ ...baseSettings, autoRefreshEnabled: true }}
+        initialProfiles={sampleProfiles}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "General" }));
+    const interval = (await screen.findByRole("spinbutton", {
+      name: /seconds between automatic refreshes/i,
+    })) as HTMLInputElement;
+
+    fireEvent.change(interval, { target: { value: "2" } });
+    fireEvent.blur(interval);
+    expect(interval.value).toBe("5");
   });
 
   it("Hotkeys tab lists the slot labels (no openPopover anymore)", async () => {

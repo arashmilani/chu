@@ -126,6 +126,11 @@ fn set_launch_at_login(state: State<'_, Arc<AppState>>, value: bool) {
 }
 
 #[tauri::command]
+fn set_auto_refresh(state: State<'_, Arc<AppState>>, enabled: bool, seconds: u32) {
+    state.set_auto_refresh(enabled, seconds);
+}
+
+#[tauri::command]
 fn set_hotkey(
     state: State<'_, Arc<AppState>>,
     app: AppHandle,
@@ -332,11 +337,7 @@ fn open_settings_window(app: &AppHandle) -> Result<(), tauri::Error> {
     Ok(())
 }
 
-fn try_attach_selected_device(
-    state: &Arc<AppState>,
-    hid: &SharedHidApi,
-    app: &AppHandle,
-) -> bool {
+fn try_attach_selected_device(state: &Arc<AppState>, hid: &SharedHidApi, app: &AppHandle) -> bool {
     let mut api = match hid.lock() {
         Ok(g) => g,
         Err(p) => p.into_inner(),
@@ -447,6 +448,37 @@ fn spawn_device_watcher(state: Arc<AppState>, hid: SharedHidApi, app: AppHandle)
     });
 }
 
+/// Periodic auto-refresh tick. Every second we ask the OS how long
+/// since the last user input and let AppState decide whether to fire
+/// a refresh. The threshold floor is 5 s, so a 1 s tick keeps the
+/// fire-on-time error below 20%. The body is a single OS call plus
+/// a brief AppState lock; negligible cost at this cadence.
+fn spawn_auto_refresh_task(state: Arc<AppState>) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let state = state.clone();
+            // user_idle::get() is a sync OS call; bounce off the
+            // async runtime to keep the IPC thread free, even though
+            // the call itself is cheap.
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                let idle_seconds = match user_idle::UserIdle::get_time() {
+                    Ok(t) => t.as_seconds(),
+                    Err(e) => {
+                        eprintln!("[auto-refresh] user-idle query failed: {e}");
+                        // Treating "unknown idle" as "user is active"
+                        // means we still fire on the schedule; failing
+                        // closed would silently disable the feature.
+                        0
+                    }
+                };
+                state.auto_refresh_tick(idle_seconds);
+            })
+            .await;
+        }
+    });
+}
+
 // -- Tray ------------------------------------------------------------
 
 fn profile_id_to_key(id: &ProfileId) -> String {
@@ -478,8 +510,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     for profile in &profiles {
         let id = format!("{PROFILE_MENU_PREFIX}{}", profile_id_to_key(&profile.id));
         let is_active = active_id.as_ref() == Some(&profile.id);
-        let item =
-            CheckMenuItem::with_id(app, &id, &profile.name, true, is_active, None::<&str>)?;
+        let item = CheckMenuItem::with_id(app, &id, &profile.name, true, is_active, None::<&str>)?;
         menu.append(&item)?;
     }
 
@@ -487,19 +518,12 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
 
-    let refresh_item = MenuItem::with_id(
-        app,
-        "force_refresh",
-        "Refresh",
-        connected,
-        None::<&str>,
-    )?;
+    let refresh_item = MenuItem::with_id(app, "force_refresh", "Refresh", connected, None::<&str>)?;
     menu.append(&refresh_item)?;
 
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
-    let settings_item =
-        MenuItem::with_id(app, "open_settings", "Settings…", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "open_settings", "Settings…", true, None::<&str>)?;
     menu.append(&settings_item)?;
 
     let quit_item = MenuItem::with_id(app, "quit", "Quit Mira", true, None::<&str>)?;
@@ -676,7 +700,6 @@ fn dispatch_hotkey(app: &AppHandle, slot: &str) {
     }
 }
 
-
 // -- Entry point -----------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -684,9 +707,7 @@ pub fn run() {
     let config_path = domain::persistence::config_path().expect("resolve config path");
     let state = Arc::new(AppState::load_from_disk(config_path).expect("load config"));
     let hotkey_manager = Arc::new(HotkeyManager::new());
-    let hid: SharedHidApi = Arc::new(Mutex::new(
-        hidapi::HidApi::new().expect("hidapi init"),
-    ));
+    let hid: SharedHidApi = Arc::new(Mutex::new(hidapi::HidApi::new().expect("hidapi init")));
 
     tauri::Builder::default()
         .plugin(
@@ -719,6 +740,7 @@ pub fn run() {
                 let _ = register_saved_shortcuts(&handle);
                 let _ = try_attach_selected_device(&state, &hid, &handle);
                 spawn_device_watcher(state.clone(), hid.clone(), handle.clone());
+                spawn_auto_refresh_task(state.clone());
                 Ok(())
             }
         })
@@ -735,6 +757,7 @@ pub fn run() {
             get_app_settings,
             get_active_profile_id,
             set_launch_at_login,
+            set_auto_refresh,
             set_hotkey,
             reset_hotkeys,
             suspend_hotkeys,

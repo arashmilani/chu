@@ -70,6 +70,13 @@ export async function setLaunchAtLogin(value: boolean): Promise<void> {
   await invoke<void>("set_launch_at_login", { value });
 }
 
+export async function setAutoRefresh(
+  enabled: boolean,
+  seconds: number,
+): Promise<void> {
+  await invoke<void>("set_auto_refresh", { enabled, seconds });
+}
+
 export async function setHotkey(
   slot: string,
   binding: string | null,

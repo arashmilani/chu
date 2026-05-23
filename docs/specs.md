@@ -348,7 +348,8 @@ the left rail:
   indicator, and a leading+trailing throttle (~80 ms) pushes the
   preset to the device live while sliding so the user sees the
   effect on the panel as they drag.
-- **General** — Launch at login toggle.
+- **General** — Launch at login toggle, plus auto-refresh
+  ([§9.5](#95-auto-refresh)).
 - **Hotkeys** — Every spec §8.1 slot with an inline recorder per row
   and a "Reset hotkeys to defaults" button at the bottom.
 - **About** — version, license, source link.
@@ -408,6 +409,54 @@ That's the entire story. No toggle, no detection, no mode-switch. If the
 defaults need tuning later, that's a v2 concern — and the right move would
 be a single Settings option for "larger text", not a whole alternate theme.
 
+### 9.5 Auto-refresh
+
+E-ink panels accumulate ghosting in `a2` mode; the longer a user
+stays in a fast-binary profile while typing or scrolling, the worse
+it gets. The app can fire a periodic full refresh on the user's
+behalf so they don't have to remember.
+
+Because the app sits outside the video pipeline (it only configures
+the monitor over USB-HID), it can't see pixel activity. The minimal
+signal that still tracks real ghosting is **wall-clock time spent
+on an `a2` profile, gated on the host reporting recent user
+input** — so the panel doesn't refresh while the user is AFK and
+nothing has been accumulating ghosting.
+
+**Controls (General tab):**
+
+- **Auto full refresh on A2 profiles** — off by default.
+- **Refresh every N seconds** — number input, range 5–9999, default
+  30. Values below 5 snap up to 5 on blur. Disabled while the toggle
+  is off.
+
+**Mechanics:**
+
+- A background task ticks every second. On each tick it checks
+  in order: feature enabled, transport attached, active profile uses
+  `a2`, time-since-last-refresh ≥ N seconds, host-reported idle time
+  < N seconds (user was active within the window).
+- If all true: send the refresh HID frame, update the
+  last-refresh-at marker, log silently. No toast, no menu indicator —
+  same no-spinner posture as the rest of the app.
+- The last-refresh marker is in-memory only; restarting the app
+  starts the clock over.
+- Reset triggers (same shape as before): any successful refresh
+  (manual tray, hotkey, or auto), profile switch, device
+  reconnect, threshold change.
+- "User idle" is read via the permission-free OS APIs
+  (`CGEventSourceSecondsSinceLastEventType` on macOS,
+  `GetLastInputInfo` on Windows, `XScreenSaverQueryInfo` on
+  X11), via the [`user-idle`](https://crates.io/crates/user-idle)
+  crate. No Input Monitoring or Accessibility permission is
+  requested — we read "seconds since last input", not the events
+  themselves.
+
+**Known limitations.** Wayland support depends on the compositor;
+where the X11 API isn't available the idle gate effectively returns
+0 (always treated as active), so the timer still fires on schedule
+but won't skip during AFK. Acceptable trade-off for v1.
+
 ## 10. Persistence
 
 Config and profile data live as a single JSON file in the OS-standard
@@ -422,10 +471,12 @@ location:
 
 ```jsonc
 {
-  "version": 1,
+  "version": 4,
   "lastActiveProfileId": "uuid-...",
   "applyLastProfileOnConnect": true,
   "launchAtLogin": false,
+  "autoRefreshEnabled": false,
+  "autoRefreshSeconds": 30,
   "hotkeys": {
     "profile1": "Ctrl+Alt+1",
     "profile2": "Ctrl+Alt+2",
@@ -510,8 +561,13 @@ Tracked but out of v1 scope:
 - **Profile import/export and shareable links.** JSON file or `mira://`
   custom URL scheme.
 - **Live preview/test pattern.** A test-pattern window for tuning.
-- **Auto-refresh on idle.** Force full refresh after N minutes of no
-  display change to clear ghosting.
+- **Better auto-refresh signal.** [§9.5](#95-auto-refresh) ships a
+  time-based timer gated on host idle. Upgrade paths if the timer
+  proves too coarse: (a) per-OS dirty-rect / pixel-diff sampling
+  (DXGI on Windows and XDamage on X11 are permission-free;
+  ScreenCaptureKit on macOS and the ScreenCast portal on Wayland are
+  not); (b) Wayland-specific idle gating that doesn't degrade to
+  "always active".
 - **Light-sensor coupling** (where the host has one) to auto-tune the
   cold/warm front light.
 - **Multi-device UI.** Per-device active profiles, named devices.
