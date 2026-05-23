@@ -168,6 +168,15 @@
   min-height: 32px;
 }
 
+/* The base .btn:hover swaps to a thicker border and compensates the
+ * padding off var(--space-4); chips use var(--space-3) as their base,
+ * so they need their own compensation or hover shifts the width by
+ * a few px. Keep border-box invariants the same. */
+.profile-chips .btn:hover:not(:disabled) {
+  padding: 0
+    calc(var(--space-3) - (var(--border-emphasis) - var(--border-width)));
+}
+
 .profile-chips .btn[data-active="true"] {
   background: var(--bg-inverse);
   color: var(--fg-inverse);
