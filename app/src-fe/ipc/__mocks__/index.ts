@@ -62,6 +62,10 @@ export async function updateProfileSettings(
   void _settings;
 }
 
+export async function resetProfileToDefaults(_id: ProfileId): Promise<void> {
+  void _id;
+}
+
 export async function getDeviceStatus(): Promise<DeviceStatus> {
   return _status;
 }

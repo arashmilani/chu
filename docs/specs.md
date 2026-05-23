@@ -188,8 +188,21 @@ pure white; `black_filter=8` deepens code text without crushing the
 mid-tones used for comments and selection highlights.
 
 These values are starting points based on community recommendations and the
-vendor's published presets. They are tunable in code but read-only from the
-UI; users who want to modify them duplicate to a custom profile.
+vendor's published presets. Their **settings are editable from the UI** —
+the original spec called for read-only presets with "duplicate to edit",
+but in practice users tried to tune them, hit a wall, and didn't think to
+duplicate. The shipped behaviour is instead:
+
+- Preset **settings** can be edited freely from the Editor.
+- Preset **names** stay fixed so users can keep finding "Coding",
+  "Read", etc. Rename is rejected for built-ins.
+- Built-ins cannot be **deleted** — they're always present as a known
+  starting point.
+- Every preset has a **Reset to defaults** button in the Editor that
+  restores the values from the table above. Custom profiles get a
+  **Delete** button in the same slot instead.
+- **Duplicate** is available on every profile (built-in or custom)
+  and yields an editable custom copy with name "Source copy".
 
 In addition, a sixth pseudo-profile, **"As-found"**, is generated on first
 connect by reading the device's current settings. It lets the user revert to

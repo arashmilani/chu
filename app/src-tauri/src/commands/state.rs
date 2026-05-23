@@ -277,27 +277,55 @@ impl AppState {
         self.persist(&inner);
     }
 
+    /// Replace the settings for any profile. Built-ins ARE editable
+    /// (spec divergence — see plan.md): users get the recognizable
+    /// preset names and a Reset button, not a wall. Renaming and
+    /// deleting built-ins are still blocked by the store.
     pub fn update_settings(
         &self,
         id: &ProfileId,
         settings: ProfileSettings,
     ) -> Result<(), crate::domain::store::ProfileError> {
         let mut inner = self.inner.lock().expect("app state poisoned");
-        // Look up; built-ins are read-only.
         let pos = inner
             .store
             .profiles()
             .iter()
             .position(|p| p.id == *id)
             .ok_or(crate::domain::store::ProfileError::NotFound)?;
-        let profile = &inner.store.profiles()[pos];
-        if profile.built_in {
-            return Err(crate::domain::store::ProfileError::ReadOnly);
-        }
-        // Replace settings via add+swap to avoid threading another
-        // mutator through ProfileStore.
         let mut new_list: Vec<Profile> = inner.store.profiles().to_vec();
         new_list[pos].settings = settings.clamp();
+        new_list[pos].modified_at = OffsetDateTime::now_utc();
+        let new_store = ProfileStore::with_profiles(new_list.clone());
+        inner.store = new_store;
+        inner.config.profiles = new_list;
+        self.persist(&inner);
+        Ok(())
+    }
+
+    /// Reset a built-in preset to the spec §7.1 values. Returns
+    /// ProfileError::NotFound for missing ids and InvalidInput when
+    /// called on a custom profile (the action makes no sense there —
+    /// "default" for a custom is "delete and recreate").
+    pub fn reset_to_defaults(
+        &self,
+        id: &ProfileId,
+    ) -> Result<(), crate::domain::store::ProfileError> {
+        let built_in_kind = match id {
+            ProfileId::BuiltIn(b) => *b,
+            ProfileId::Custom(_) => {
+                return Err(crate::domain::store::ProfileError::InvalidPosition(0, 0))
+            }
+        };
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        let pos = inner
+            .store
+            .profiles()
+            .iter()
+            .position(|p| p.id == *id)
+            .ok_or(crate::domain::store::ProfileError::NotFound)?;
+        let mut new_list: Vec<Profile> = inner.store.profiles().to_vec();
+        new_list[pos].settings = built_in_kind.settings();
         new_list[pos].modified_at = OffsetDateTime::now_utc();
         let new_store = ProfileStore::with_profiles(new_list.clone());
         inner.store = new_store;
@@ -430,12 +458,68 @@ mod tests {
     }
 
     #[test]
-    fn update_settings_rejects_built_in_presets() {
+    fn update_settings_edits_built_in_in_place() {
+        // Built-ins are editable; the user gets a Reset button to
+        // revert. Settings still clamp to spec range.
         let state = AppState::in_memory();
         let id = ProfileId::BuiltIn(BuiltInPreset::Coding);
-        let err = state
-            .update_settings(&id, BuiltInPreset::Speed.settings())
-            .unwrap_err();
+        let mut tweaked = BuiltInPreset::Coding.settings();
+        tweaked.contrast = 15;
+        state.update_settings(&id, tweaked).unwrap();
+        let profile = state
+            .list_profiles()
+            .into_iter()
+            .find(|p| p.id == id)
+            .unwrap();
+        assert_eq!(profile.settings.contrast, 15);
+    }
+
+    #[test]
+    fn reset_to_defaults_restores_spec_values_after_edits() {
+        let state = AppState::in_memory();
+        let id = ProfileId::BuiltIn(BuiltInPreset::Coding);
+        let mut tweaked = BuiltInPreset::Coding.settings();
+        tweaked.contrast = 1;
+        state.update_settings(&id, tweaked).unwrap();
+        state.reset_to_defaults(&id).unwrap();
+        let profile = state
+            .list_profiles()
+            .into_iter()
+            .find(|p| p.id == id)
+            .unwrap();
+        assert_eq!(profile.settings, BuiltInPreset::Coding.settings());
+    }
+
+    #[test]
+    fn reset_to_defaults_refuses_custom_profiles() {
+        let state = AppState::in_memory();
+        let new_id = state
+            .duplicate(&ProfileId::BuiltIn(BuiltInPreset::Coding))
+            .unwrap();
+        let err = state.reset_to_defaults(&new_id).unwrap_err();
+        // Reuse InvalidPosition as a "not applicable here" signal;
+        // the command-layer translates this to AppError::InvalidInput.
+        assert!(matches!(
+            err,
+            crate::domain::store::ProfileError::InvalidPosition(_, _)
+        ));
+    }
+
+    #[test]
+    fn rename_still_rejects_built_in_presets() {
+        // Editability is for settings only — preset names stay fixed
+        // so users can recognise them.
+        let state = AppState::in_memory();
+        let id = ProfileId::BuiltIn(BuiltInPreset::Coding);
+        let err = state.rename(&id, "Hacked").unwrap_err();
+        assert_eq!(err, crate::domain::store::ProfileError::ReadOnly);
+    }
+
+    #[test]
+    fn delete_still_rejects_built_in_presets() {
+        let state = AppState::in_memory();
+        let id = ProfileId::BuiltIn(BuiltInPreset::Coding);
+        let err = state.delete(&id).unwrap_err();
         assert_eq!(err, crate::domain::store::ProfileError::ReadOnly);
     }
 

@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 
 import { SettingsForm } from "../components/SettingsForm";
-import { listProfiles, updateProfileSettings } from "../ipc";
+import {
+  deleteProfile,
+  duplicateProfile,
+  listProfiles,
+  resetProfileToDefaults,
+  updateProfileSettings,
+} from "../ipc";
 import type { Profile, ProfileSettings } from "../ipc/types";
 
 interface EditorProps {
@@ -10,6 +16,8 @@ interface EditorProps {
 }
 
 // Two-pane shell: profile list on the left, editor form on the right.
+// Built-in presets are editable (spec divergence) but their names are
+// fixed and they can't be deleted; every preset has a Reset button.
 export function Editor({ initialProfiles }: EditorProps = {}) {
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -29,6 +37,49 @@ export function Editor({ initialProfiles }: EditorProps = {}) {
   }, [initialProfiles, selectedId]);
 
   const selected = profiles.find((p) => p.id === selectedId);
+
+  async function refresh() {
+    try {
+      const ps = await listProfiles();
+      setProfiles(ps);
+    } catch {
+      // No-op: backend is the source of truth; we'll catch up next refresh.
+    }
+  }
+
+  async function onDuplicate() {
+    if (!selected) return;
+    try {
+      const newId = await duplicateProfile(selected.id);
+      const ps = await listProfiles();
+      setProfiles(ps);
+      setSelectedId(newId);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function onDelete() {
+    if (!selected || selected.builtIn) return;
+    try {
+      await deleteProfile(selected.id);
+      const ps = await listProfiles();
+      setProfiles(ps);
+      setSelectedId(ps[0]?.id ?? null);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function onReset() {
+    if (!selected || !selected.builtIn) return;
+    try {
+      await resetProfileToDefaults(selected.id);
+      await refresh();
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <div className="editor">
@@ -52,16 +103,27 @@ export function Editor({ initialProfiles }: EditorProps = {}) {
       <section aria-label="Profile editor" className="editor__pane">
         {selected ? (
           <>
-            <h1>{selected.name}</h1>
-            {selected.builtIn && (
-              <span className="editor__readonly">Built-in · read only</span>
-            )}
+            <header className="editor__header">
+              <h1>{selected.name}</h1>
+              <div className="editor__header-actions">
+                <button type="button" className="btn" onClick={onDuplicate}>
+                  Duplicate
+                </button>
+                {selected.builtIn ? (
+                  <button type="button" className="btn" onClick={onReset}>
+                    Reset to defaults
+                  </button>
+                ) : (
+                  <button type="button" className="btn" onClick={onDelete}>
+                    Delete
+                  </button>
+                )}
+              </div>
+            </header>
             <SettingsForm
               key={selected.id}
               initial={selected.settings}
-              disabled={selected.builtIn}
               onChange={(next: ProfileSettings) => {
-                if (selected.builtIn) return;
                 updateProfileSettings(selected.id, next).catch(() => {});
               }}
             />

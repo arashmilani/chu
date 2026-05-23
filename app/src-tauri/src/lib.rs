@@ -72,6 +72,14 @@ fn update_profile_settings(
 }
 
 #[tauri::command]
+fn reset_profile_to_defaults(
+    state: State<'_, Arc<AppState>>,
+    id: ProfileId,
+) -> Result<(), AppError> {
+    commands::profiles::reset_profile_to_defaults(&state, id)
+}
+
+#[tauri::command]
 fn get_device_status(state: State<'_, Arc<AppState>>) -> commands::device::DeviceStatus {
     commands::device::get_device_status(&state)
 }
@@ -577,6 +585,7 @@ pub fn run() {
             rename_profile,
             delete_profile,
             update_profile_settings,
+            reset_profile_to_defaults,
             get_device_status,
             force_refresh,
             get_app_settings,

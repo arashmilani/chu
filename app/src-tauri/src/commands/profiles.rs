@@ -52,6 +52,10 @@ pub fn update_profile_settings(
     Ok(state.update_settings(&id, settings)?)
 }
 
+pub fn reset_profile_to_defaults(state: &AppState, id: ProfileId) -> Result<(), AppError> {
+    Ok(state.reset_to_defaults(&id)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

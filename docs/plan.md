@@ -85,6 +85,27 @@ What was verified during the polish pass; what's still rough:
   global-shortcut plugin needs the same Tauri runtime wiring as the
   tray, so they shipped together rather than as separate phases.
 
+### Behavioural divergence: editable built-in presets
+
+Spec §7.1 originally called for built-ins to be read-only with
+"duplicate to edit". Live testing showed that's an unforgiving model
+— users try to tune the slider, hit a wall, and don't think to
+duplicate. The shipped behaviour:
+
+- Preset *settings* are editable from the UI; only names and the
+  list-membership are locked.
+- Every preset has a **Reset to defaults** button in the Editor that
+  restores the spec §7.1 values. Custom profiles get **Delete** in
+  the same slot.
+- A **Duplicate** button is always present, so the original "make a
+  copy" workflow is still one click away.
+
+Backend: `AppState::update_settings` no longer rejects built-ins;
+`AppState::reset_to_defaults` is new and is wired through a
+`reset_profile_to_defaults` Tauri command. `ProfileStore::rename` and
+`ProfileStore::delete` still reject built-ins so the recognized names
+and the always-present list are guaranteed.
+
 ---
 
 ## 1. Working Method

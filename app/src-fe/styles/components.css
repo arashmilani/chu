@@ -203,11 +203,24 @@
   overflow-y: auto;
 }
 
-.editor__pane > h1 {
+.editor__pane > .editor__header h1 {
   font-size: var(--font-size-display);
   font-weight: 700;
   letter-spacing: var(--tracking-tight);
-  margin-bottom: var(--space-2);
+}
+
+.editor__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.editor__header-actions {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .editor__readonly {

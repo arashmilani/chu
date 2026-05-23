@@ -46,6 +46,10 @@ export async function updateProfileSettings(
   await invoke<void>("update_profile_settings", { id, settings });
 }
 
+export async function resetProfileToDefaults(id: ProfileId): Promise<void> {
+  await invoke<void>("reset_profile_to_defaults", { id });
+}
+
 export async function getDeviceStatus(): Promise<DeviceStatus> {
   return invoke<DeviceStatus>("get_device_status");
 }
