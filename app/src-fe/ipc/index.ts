@@ -8,6 +8,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   ApplyOutcome,
   AppError,
+  AppSettings,
   DeviceStatus,
   Profile,
   ProfileId,
@@ -50,6 +51,33 @@ export async function getDeviceStatus(): Promise<DeviceStatus> {
 
 export async function forceRefresh(): Promise<void> {
   await invoke<void>("force_refresh");
+}
+
+export async function getAppSettings(): Promise<AppSettings> {
+  return invoke<AppSettings>("get_app_settings");
+}
+
+export async function setApplyLastOnConnect(value: boolean): Promise<void> {
+  await invoke<void>("set_apply_last_on_connect", { value });
+}
+
+export async function setLaunchAtLogin(value: boolean): Promise<void> {
+  await invoke<void>("set_launch_at_login", { value });
+}
+
+export async function setHotkey(
+  slot: string,
+  binding: string | null,
+): Promise<void> {
+  await invoke<void>("set_hotkey", { slot, binding });
+}
+
+export async function resetHotkeys(): Promise<void> {
+  await invoke<void>("reset_hotkeys");
+}
+
+export async function appVersion(): Promise<string> {
+  return invoke<string>("app_version");
 }
 
 export function onProfileApplied(

@@ -13,7 +13,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::commands::{AppError, AppState};
 use crate::domain::hotkeys::{
-    default_bindings, SLOT_OPEN_POPOVER, SLOT_PROFILE_1, SLOT_PROFILE_2, SLOT_PROFILE_3,
+    default_bindings, Binding, SLOT_OPEN_POPOVER, SLOT_PROFILE_1, SLOT_PROFILE_2, SLOT_PROFILE_3,
     SLOT_PROFILE_4, SLOT_PROFILE_5, SLOT_REFRESH,
 };
 use crate::domain::profile::{Profile, ProfileId, ProfileSettings};
@@ -79,6 +79,74 @@ fn get_device_status(state: State<'_, Arc<AppState>>) -> commands::device::Devic
 #[tauri::command]
 fn force_refresh(state: State<'_, Arc<AppState>>) -> Result<(), AppError> {
     commands::device::force_refresh(&state)
+}
+
+#[tauri::command]
+fn get_app_settings(state: State<'_, Arc<AppState>>) -> commands::state::AppSettings {
+    state.app_settings()
+}
+
+#[tauri::command]
+fn set_apply_last_on_connect(state: State<'_, Arc<AppState>>, value: bool) {
+    state.set_apply_last_on_connect(value);
+}
+
+#[tauri::command]
+fn set_launch_at_login(state: State<'_, Arc<AppState>>, value: bool) {
+    state.set_launch_at_login(value);
+}
+
+#[tauri::command]
+fn set_hotkey(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    slot: String,
+    binding: Option<String>,
+) -> Result<(), AppError> {
+    let manager = app.try_state::<Arc<HotkeyManager>>();
+    let global = app.global_shortcut();
+
+    // Unregister the previous chord (if any) for this slot.
+    if let Some(manager) = manager.as_ref() {
+        if let Some(prev) = manager.take(&slot) {
+            let _ = global.unregister(prev);
+        }
+    }
+
+    // Register the new chord (if provided + parseable).
+    if let Some(text) = binding.as_deref() {
+        let parsed = Binding::parse(text)
+            .map_err(|e| AppError::invalid_input(format!("hotkey parse: {e}")))?;
+        if let Some(shortcut) = binding_to_shortcut(&parsed) {
+            global
+                .register(shortcut)
+                .map_err(|e| AppError::invalid_input(format!("hotkey register: {e}")))?;
+            if let Some(manager) = manager.as_ref() {
+                manager.set(&slot, shortcut);
+            }
+        }
+    }
+
+    state.set_hotkey(slot, binding);
+    Ok(())
+}
+
+#[tauri::command]
+fn reset_hotkeys(state: State<'_, Arc<AppState>>, app: AppHandle) {
+    let global = app.global_shortcut();
+    let _ = global.unregister_all();
+    state.reset_hotkeys_to_defaults();
+    if let Some(manager) = app.try_state::<Arc<HotkeyManager>>() {
+        for slot in manager.registered_slots() {
+            manager.take(&slot);
+        }
+    }
+    let _ = register_default_shortcuts(&app);
+}
+
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[tauri::command]
@@ -364,6 +432,12 @@ pub fn run() {
             update_profile_settings,
             get_device_status,
             force_refresh,
+            get_app_settings,
+            set_apply_last_on_connect,
+            set_launch_at_login,
+            set_hotkey,
+            reset_hotkeys,
+            app_version,
             open_editor,
             open_settings,
             close_popover,

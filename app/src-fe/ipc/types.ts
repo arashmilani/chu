@@ -57,3 +57,19 @@ export interface AppError {
 
 // Hard-coded id of the default preset (matches Rust BuiltInPreset::Coding).
 export const DEFAULT_PROFILE_ID: ProfileId = "coding";
+
+export interface AppSettings {
+  applyLastProfileOnConnect: boolean;
+  launchAtLogin: boolean;
+  hotkeys: Record<string, string>;
+}
+
+export const HOTKEY_SLOTS: { slot: string; label: string }[] = [
+  { slot: "profile1", label: "Switch to profile 1" },
+  { slot: "profile2", label: "Switch to profile 2" },
+  { slot: "profile3", label: "Switch to profile 3" },
+  { slot: "profile4", label: "Switch to profile 4" },
+  { slot: "profile5", label: "Switch to profile 5" },
+  { slot: "refresh", label: "Force full refresh" },
+  { slot: "openPopover", label: "Open tray popover" },
+];

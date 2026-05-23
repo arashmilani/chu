@@ -178,6 +178,49 @@ impl AppState {
         Ok(())
     }
 
+    /// Read a snapshot of app-level settings (everything except the
+    /// profile list). Returned by value so the frontend can render
+    /// from it without holding a lock.
+    pub fn app_settings(&self) -> AppSettings {
+        let inner = self.inner.lock().expect("app state poisoned");
+        AppSettings {
+            apply_last_profile_on_connect: inner.config.apply_last_profile_on_connect,
+            launch_at_login: inner.config.launch_at_login,
+            hotkeys: inner.config.hotkeys.clone(),
+        }
+    }
+
+    pub fn set_apply_last_on_connect(&self, value: bool) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        inner.config.apply_last_profile_on_connect = value;
+        self.persist(&inner);
+    }
+
+    pub fn set_launch_at_login(&self, value: bool) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        inner.config.launch_at_login = value;
+        self.persist(&inner);
+    }
+
+    pub fn set_hotkey(&self, slot: String, binding: Option<String>) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        match binding {
+            Some(b) => {
+                inner.config.hotkeys.insert(slot, b);
+            }
+            None => {
+                inner.config.hotkeys.remove(&slot);
+            }
+        }
+        self.persist(&inner);
+    }
+
+    pub fn reset_hotkeys_to_defaults(&self) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        inner.config.hotkeys = crate::domain::persistence::default_hotkeys();
+        self.persist(&inner);
+    }
+
     pub fn update_settings(
         &self,
         id: &ProfileId,
@@ -216,6 +259,17 @@ impl AppState {
             let _ = persistence::save_to(path, &inner.config);
         }
     }
+}
+
+/// Serializable view of the app-level config the Settings window
+/// renders from. Excludes the profile list (which has its own
+/// list_profiles command).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    pub apply_last_profile_on_connect: bool,
+    pub launch_at_login: bool,
+    pub hotkeys: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -363,6 +417,57 @@ mod tests {
             .apply_profile(&ProfileId::BuiltIn(BuiltInPreset::Coding))
             .unwrap();
         assert_eq!(m2.writes().len(), 7);
+    }
+
+    #[test]
+    fn app_settings_returns_defaults_for_a_fresh_state() {
+        let state = AppState::in_memory();
+        let s = state.app_settings();
+        assert!(s.apply_last_profile_on_connect);
+        assert!(!s.launch_at_login);
+        assert_eq!(s.hotkeys.get("profile1").unwrap(), "Ctrl+Alt+1");
+        assert_eq!(s.hotkeys.get("openPopover").unwrap(), "Ctrl+Alt+Shift+M");
+    }
+
+    #[test]
+    fn set_launch_at_login_persists_and_is_visible_in_app_settings() {
+        let state = AppState::in_memory();
+        state.set_launch_at_login(true);
+        assert!(state.app_settings().launch_at_login);
+        state.set_launch_at_login(false);
+        assert!(!state.app_settings().launch_at_login);
+    }
+
+    #[test]
+    fn set_apply_last_on_connect_toggles() {
+        let state = AppState::in_memory();
+        state.set_apply_last_on_connect(false);
+        assert!(!state.app_settings().apply_last_profile_on_connect);
+    }
+
+    #[test]
+    fn set_hotkey_replaces_existing_binding_in_slot() {
+        let state = AppState::in_memory();
+        state.set_hotkey("profile1".into(), Some("Ctrl+Shift+1".into()));
+        assert_eq!(state.app_settings().hotkeys.get("profile1").unwrap(), "Ctrl+Shift+1");
+    }
+
+    #[test]
+    fn set_hotkey_with_none_removes_the_slot() {
+        let state = AppState::in_memory();
+        state.set_hotkey("profile1".into(), None);
+        assert!(state.app_settings().hotkeys.get("profile1").is_none());
+    }
+
+    #[test]
+    fn reset_hotkeys_restores_spec_defaults_after_arbitrary_edits() {
+        let state = AppState::in_memory();
+        state.set_hotkey("profile1".into(), Some("Ctrl+Shift+1".into()));
+        state.set_hotkey("refresh".into(), None);
+        state.reset_hotkeys_to_defaults();
+        let h = state.app_settings().hotkeys;
+        assert_eq!(h.get("profile1").unwrap(), "Ctrl+Alt+1");
+        assert_eq!(h.get("refresh").unwrap(), "Ctrl+Alt+Shift+R");
     }
 
     #[test]
