@@ -116,11 +116,6 @@ fn get_app_settings(state: State<'_, Arc<AppState>>) -> commands::state::AppSett
 }
 
 #[tauri::command]
-fn set_apply_last_on_connect(state: State<'_, Arc<AppState>>, value: bool) {
-    state.set_apply_last_on_connect(value);
-}
-
-#[tauri::command]
 fn set_launch_at_login(state: State<'_, Arc<AppState>>, value: bool) {
     state.set_launch_at_login(value);
 }
@@ -347,6 +342,26 @@ fn try_attach_selected_device(
                 );
                 if devices.len() > 1 {
                     let _ = app.emit("device:multi-detected", &devices);
+                }
+                // Push the user's last-active preset back onto the
+                // device so reconnects (and cold starts) restore the
+                // look they had before — no toggle, just the right
+                // default. Best-effort: errors are logged, not fatal.
+                if let Some(active) = state.active_profile_id() {
+                    match state.apply_profile(&active) {
+                        Ok(frames) => {
+                            let _ = app.emit(
+                                "profile:applied",
+                                commands::profiles::ApplyOutcome {
+                                    profile_id: active,
+                                    frames_written: frames.len(),
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("[mira] auto-apply on connect failed: {e}");
+                        }
+                    }
                 }
                 let _ = refresh_tray(app);
                 true
@@ -648,7 +663,6 @@ pub fn run() {
             get_device_status,
             force_refresh,
             get_app_settings,
-            set_apply_last_on_connect,
             set_launch_at_login,
             set_hotkey,
             reset_hotkeys,

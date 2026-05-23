@@ -222,7 +222,6 @@ impl AppState {
     pub fn app_settings(&self) -> AppSettings {
         let inner = self.inner.lock().expect("app state poisoned");
         AppSettings {
-            apply_last_profile_on_connect: inner.config.apply_last_profile_on_connect,
             launch_at_login: inner.config.launch_at_login,
             hotkeys: inner.config.hotkeys.clone(),
         }
@@ -244,12 +243,6 @@ impl AppState {
             .config
             .selected_device_serial
             .clone()
-    }
-
-    pub fn set_apply_last_on_connect(&self, value: bool) {
-        let mut inner = self.inner.lock().expect("app state poisoned");
-        inner.config.apply_last_profile_on_connect = value;
-        self.persist(&inner);
     }
 
     pub fn set_launch_at_login(&self, value: bool) {
@@ -351,7 +344,6 @@ impl AppState {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
-    pub apply_last_profile_on_connect: bool,
     pub launch_at_login: bool,
     pub hotkeys: std::collections::BTreeMap<String, String>,
 }
@@ -563,7 +555,6 @@ mod tests {
     fn app_settings_returns_defaults_for_a_fresh_state() {
         let state = AppState::in_memory();
         let s = state.app_settings();
-        assert!(s.apply_last_profile_on_connect);
         assert!(!s.launch_at_login);
         assert_eq!(s.hotkeys.get("profile1").unwrap(), "Ctrl+Alt+1");
         assert_eq!(s.hotkeys.get("openPopover").unwrap(), "Ctrl+Alt+Shift+M");
@@ -576,13 +567,6 @@ mod tests {
         assert!(state.app_settings().launch_at_login);
         state.set_launch_at_login(false);
         assert!(!state.app_settings().launch_at_login);
-    }
-
-    #[test]
-    fn set_apply_last_on_connect_toggles() {
-        let state = AppState::in_memory();
-        state.set_apply_last_on_connect(false);
-        assert!(!state.app_settings().apply_last_profile_on_connect);
     }
 
     #[test]

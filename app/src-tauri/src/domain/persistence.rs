@@ -37,8 +37,6 @@ pub struct Config {
     pub version: u32,
     #[serde(default)]
     pub last_active_profile_id: Option<ProfileId>,
-    #[serde(default = "default_apply_last")]
-    pub apply_last_profile_on_connect: bool,
     #[serde(default)]
     pub launch_at_login: bool,
     #[serde(default)]
@@ -50,16 +48,11 @@ pub struct Config {
     pub selected_device_serial: Option<String>,
 }
 
-fn default_apply_last() -> bool {
-    true
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
             version: CURRENT_VERSION,
             last_active_profile_id: Some(ProfileId::BuiltIn(BuiltInPreset::Coding)),
-            apply_last_profile_on_connect: true,
             launch_at_login: false,
             hotkeys: default_hotkeys(),
             profiles: built_in_profiles(),
@@ -186,7 +179,6 @@ mod tests {
         let cfg = Config::default();
         assert_eq!(cfg.version, CURRENT_VERSION);
         assert_eq!(cfg.profiles.len(), 6);
-        assert!(cfg.apply_last_profile_on_connect);
         assert!(!cfg.launch_at_login);
         assert_eq!(cfg.hotkeys.get("profile1").unwrap(), "Ctrl+Alt+1");
     }

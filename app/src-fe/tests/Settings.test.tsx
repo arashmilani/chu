@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { Settings } from "../windows/Settings";
@@ -45,7 +45,6 @@ const sampleProfiles = [
 ];
 
 const baseSettings = {
-  applyLastProfileOnConnect: true,
   launchAtLogin: false,
   hotkeys: {
     profile1: "Ctrl+Alt+1",
@@ -144,24 +143,6 @@ describe("Settings", () => {
     expect(await screen.findByText(/switch to profile 1/i)).toBeInTheDocument();
     expect(screen.getByText(/^refresh$/i)).toBeInTheDocument();
     expect(screen.queryByText(/open tray popover/i)).not.toBeInTheDocument();
-  });
-
-  it("Device tab toggles apply-last-on-connect", async () => {
-    render(
-      <Settings
-        initialAppSettings={baseSettings}
-        initialProfiles={sampleProfiles}
-      />,
-    );
-    fireEvent.click(screen.getByRole("tab", { name: "Device" }));
-    const toggle = await screen.findByRole("checkbox", {
-      name: /re-apply last profile/i,
-    });
-    expect((toggle as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(toggle);
-    await waitFor(() =>
-      expect((toggle as HTMLInputElement).checked).toBe(false),
-    );
   });
 
   it("About tab shows version and license", async () => {

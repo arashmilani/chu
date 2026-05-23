@@ -14,7 +14,6 @@ import type {
 let _profiles: Profile[] = [];
 let _status: DeviceStatus = { connected: false };
 let _settings: AppSettings = {
-  applyLastProfileOnConnect: true,
   launchAtLogin: false,
   hotkeys: {
     profile1: "Ctrl+Alt+1",
@@ -74,10 +73,6 @@ export async function forceRefresh(): Promise<void> {}
 
 export async function getAppSettings(): Promise<AppSettings> {
   return _settings;
-}
-
-export async function setApplyLastOnConnect(value: boolean): Promise<void> {
-  _settings = { ..._settings, applyLastProfileOnConnect: value };
 }
 
 export async function setLaunchAtLogin(value: boolean): Promise<void> {

@@ -66,7 +66,6 @@ export interface AppError {
 export const DEFAULT_PROFILE_ID: ProfileId = "coding";
 
 export interface AppSettings {
-  applyLastProfileOnConnect: boolean;
   launchAtLogin: boolean;
   hotkeys: Record<string, string>;
 }

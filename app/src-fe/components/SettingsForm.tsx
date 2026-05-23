@@ -13,8 +13,11 @@ interface SettingsFormProps {
 // Sliders update local state on each input; callers decide what to
 // do with the stream — debounce, send live, or store on save.
 //
-// The component is keyed by profile id in the parent, so React resets
-// internal state when the user switches profiles — no effect needed.
+// State is purely local and only initialised once. Callers reset it
+// by changing the `key` prop (e.g. include the profile id and the
+// modifiedAt timestamp), which remounts the form with the new
+// `initial` value. This is how the Reset-to-defaults flow refreshes
+// the displayed values.
 export function SettingsForm({
   initial,
   disabled = false,

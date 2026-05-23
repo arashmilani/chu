@@ -1,32 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { HotkeyRecorder } from "../components/HotkeyRecorder";
 import { SettingsForm } from "../components/SettingsForm";
 import {
+  applyProfile,
   appVersion,
   deleteProfile,
   duplicateProfile,
   getAppSettings,
-  listDevices,
   listProfiles,
+  renameProfile,
   resetHotkeys,
   resetProfileToDefaults,
-  selectDevice,
-  setApplyLastOnConnect,
   setHotkey,
   setLaunchAtLogin,
   updateProfileSettings,
 } from "../ipc";
 import type {
   AppSettings,
-  DeviceInfo,
   Profile,
+  ProfileId,
   ProfileSettings,
 } from "../ipc/types";
 import { HOTKEY_SLOTS } from "../ipc/types";
 
-type Tab = "Profiles" | "General" | "Hotkeys" | "Device" | "About";
-const TABS: Tab[] = ["Profiles", "General", "Hotkeys", "Device", "About"];
+type Tab = "Profiles" | "General" | "Hotkeys" | "About";
+const TABS: Tab[] = ["Profiles", "General", "Hotkeys", "About"];
 
 interface SettingsProps {
   /** Test/preview hook — skip the IPC bootstrap. */
@@ -74,6 +73,17 @@ export function Settings({
     }
   }
 
+  // Optimistic patch for slider edits: the IPC is fired-and-forgotten
+  // because the loop fires per-input event and a refresh-from-disk
+  // would remount the editor mid-drag. Without this, switching chips
+  // and switching back surfaces stale settings from the last
+  // refresh, even though the backend has the edit.
+  function patchProfileSettings(id: ProfileId, settings: ProfileSettings) {
+    setProfiles((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, settings } : p)),
+    );
+  }
+
   return (
     <div className="settings">
       <nav
@@ -104,16 +114,17 @@ export function Settings({
         <h1>{tab}</h1>
 
         {tab === "Profiles" && (
-          <ProfilesPane profiles={profiles} onChange={refreshProfiles} />
+          <ProfilesPane
+            profiles={profiles}
+            onChange={refreshProfiles}
+            onPatchProfileSettings={patchProfileSettings}
+          />
         )}
         {tab === "General" && settings && (
           <GeneralPane settings={settings} onChange={setSettings} />
         )}
         {tab === "Hotkeys" && settings && (
           <HotkeysPane settings={settings} onChange={setSettings} />
-        )}
-        {tab === "Device" && settings && (
-          <DevicePane settings={settings} onChange={setSettings} />
         )}
         {tab === "About" && <AboutPane version={version} />}
         {tab !== "Profiles" && tab !== "About" && !settings && <p>Loading…</p>}
@@ -127,9 +138,14 @@ export function Settings({
 interface ProfilesPaneProps {
   profiles: Profile[];
   onChange: () => Promise<void> | void;
+  onPatchProfileSettings: (id: ProfileId, settings: ProfileSettings) => void;
 }
 
-function ProfilesPane({ profiles, onChange }: ProfilesPaneProps) {
+function ProfilesPane({
+  profiles,
+  onChange,
+  onPatchProfileSettings,
+}: ProfilesPaneProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     profiles[0]?.id ?? null,
   );
@@ -196,34 +212,186 @@ function ProfilesPane({ profiles, onChange }: ProfilesPaneProps) {
       </nav>
 
       {selected && (
-        <>
-          <header className="editor__header">
-            <h2>{selected.name}</h2>
-            <div className="editor__header-actions">
-              <button type="button" className="btn" onClick={onDuplicate}>
-                Duplicate
-              </button>
-              {selected.builtIn ? (
-                <button type="button" className="btn" onClick={onReset}>
-                  Reset to defaults
-                </button>
-              ) : (
-                <button type="button" className="btn" onClick={onDelete}>
-                  Delete
-                </button>
-              )}
-            </div>
-          </header>
-          <SettingsForm
-            key={selected.id}
-            initial={selected.settings}
-            onChange={(next: ProfileSettings) => {
-              updateProfileSettings(selected.id, next).catch(() => {});
-            }}
-          />
-        </>
+        // Keyed by id + modifiedAt so the editor (and its inline name
+        // input + save indicator) remounts cleanly whenever the backend
+        // hands us a new snapshot — Reset to defaults, rename commit,
+        // duplicate. Slider edits patch the parent without touching
+        // modifiedAt, so the key stays stable across drags.
+        <ProfileEditor
+          key={`${selected.id}::${selected.modifiedAt}`}
+          profile={selected}
+          onAfterMutation={onChange}
+          onPatchSettings={onPatchProfileSettings}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+          onReset={onReset}
+        />
       )}
     </>
+  );
+}
+
+interface ProfileEditorProps {
+  profile: Profile;
+  onAfterMutation: () => Promise<void> | void;
+  onPatchSettings: (id: ProfileId, settings: ProfileSettings) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onReset: () => void;
+}
+
+function ProfileEditor({
+  profile,
+  onAfterMutation,
+  onPatchSettings,
+  onDuplicate,
+  onDelete,
+  onReset,
+}: ProfileEditorProps) {
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(
+    "idle",
+  );
+
+  // Live-apply throttle: every slider tick fires updateProfileSettings
+  // (cheap) but pushing HID frames at full slider rate would flood the
+  // device. Leading edge fires immediately for snappy feedback;
+  // trailing edge guarantees the final value lands when the drag
+  // stops. 80 ms ≈ 12 fps, well within what e-ink can usefully redraw.
+  const APPLY_INTERVAL_MS = 80;
+  const lastApplyAtRef = useRef(0);
+  const applyTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (applyTimerRef.current !== null) {
+        window.clearTimeout(applyTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  function scheduleLiveApply(id: string) {
+    const now = Date.now();
+    const elapsed = now - lastApplyAtRef.current;
+    if (elapsed >= APPLY_INTERVAL_MS) {
+      lastApplyAtRef.current = now;
+      if (applyTimerRef.current !== null) {
+        window.clearTimeout(applyTimerRef.current);
+        applyTimerRef.current = null;
+      }
+      applyProfile(id).catch(() => {});
+      return;
+    }
+    if (applyTimerRef.current !== null) return;
+    applyTimerRef.current = window.setTimeout(() => {
+      applyTimerRef.current = null;
+      lastApplyAtRef.current = Date.now();
+      applyProfile(id).catch(() => {});
+    }, APPLY_INTERVAL_MS - elapsed);
+  }
+
+  return (
+    <>
+      <header className="editor__header">
+        {profile.builtIn ? (
+          <h2>{profile.name}</h2>
+        ) : (
+          <ProfileNameEditor
+            value={profile.name}
+            onCommit={async (next) => {
+              try {
+                await renameProfile(profile.id, next);
+                await onAfterMutation();
+              } catch {
+                // ignore — UI will revert to the persisted name on
+                // the next refresh
+              }
+            }}
+          />
+        )}
+        <div className="editor__header-actions">
+          <button type="button" className="btn" onClick={onDuplicate}>
+            Duplicate
+          </button>
+          {profile.builtIn ? (
+            <button type="button" className="btn" onClick={onReset}>
+              Reset to defaults
+            </button>
+          ) : (
+            <button type="button" className="btn" onClick={onDelete}>
+              Delete
+            </button>
+          )}
+        </div>
+      </header>
+      <p className="editor__save-status" role="status" aria-live="polite">
+        {saveState === "saving"
+          ? "Saving…"
+          : saveState === "saved"
+            ? "Saved"
+            : "Changes save as you make them."}
+      </p>
+      <SettingsForm
+        initial={profile.settings}
+        onChange={(next: ProfileSettings) => {
+          // Update the parent's profiles array right away so chip
+          // switches don't surface stale settings; the IPC round-trip
+          // is fire-and-forget for the slider drag.
+          onPatchSettings(profile.id, next);
+          setSaveState("saving");
+          updateProfileSettings(profile.id, next)
+            .then(() => setSaveState("saved"))
+            .catch(() => setSaveState("idle"));
+          // Push to the device so the user sees the effect on the
+          // panel as they drag, not after they let go.
+          scheduleLiveApply(profile.id);
+        }}
+      />
+    </>
+  );
+}
+
+interface ProfileNameEditorProps {
+  value: string;
+  onCommit: (next: string) => void | Promise<void>;
+}
+
+// Inline-editable profile name for custom profiles. Looks like the
+// h2 it replaces — same type, same baseline — so the header layout
+// stays put whether the user is editing or not. The parent owns the
+// reset-on-update lifecycle via the editor's key prop, so this
+// component just manages local draft text.
+function ProfileNameEditor({ value, onCommit }: ProfileNameEditorProps) {
+  const [draft, setDraft] = useState(value);
+
+  function commit() {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === value) {
+      setDraft(value);
+      return;
+    }
+    void onCommit(trimmed);
+  }
+
+  return (
+    <input
+      type="text"
+      className="profile-name-input"
+      aria-label="Profile name"
+      value={draft}
+      onChange={(e) => setDraft(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          setDraft(value);
+          e.currentTarget.blur();
+        }
+      }}
+    />
   );
 }
 
@@ -283,63 +451,6 @@ function HotkeysPane({ settings, onChange }: PaneProps) {
       >
         Reset hotkeys to defaults
       </button>
-    </>
-  );
-}
-
-function DevicePane({ settings, onChange }: PaneProps) {
-  const [devices, setDevices] = useState<DeviceInfo[]>([]);
-  const [selected, setSelected] = useState<string>("");
-
-  useEffect(() => {
-    listDevices()
-      .then(setDevices)
-      .catch(() => {});
-  }, []);
-
-  return (
-    <>
-      <label className="toggle-row">
-        <input
-          type="checkbox"
-          checked={settings.applyLastProfileOnConnect}
-          onChange={(e) => {
-            const value = e.currentTarget.checked;
-            setApplyLastOnConnect(value).catch(() => {});
-            onChange({ ...settings, applyLastProfileOnConnect: value });
-          }}
-        />
-        Re-apply last profile when the device reconnects
-      </label>
-
-      <section aria-label="Connected devices">
-        <h2>Connected devices</h2>
-        {devices.length === 0 ? (
-          <p>No Mira devices found.</p>
-        ) : (
-          <ul>
-            {devices.map((d) => (
-              <li key={d.serialNumber ?? `${d.vendorId}:${d.productId}`}>
-                <label>
-                  <input
-                    type="radio"
-                    name="device"
-                    value={d.serialNumber ?? ""}
-                    checked={selected === (d.serialNumber ?? "")}
-                    onChange={() => {
-                      const serial = d.serialNumber ?? "";
-                      setSelected(serial);
-                      selectDevice(d.serialNumber).catch(() => {});
-                    }}
-                  />
-                  {d.productString ?? "Mira"}
-                  {d.serialNumber ? ` (${d.serialNumber})` : ""}
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </>
   );
 }

@@ -62,10 +62,6 @@ export async function getAppSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_app_settings");
 }
 
-export async function setApplyLastOnConnect(value: boolean): Promise<void> {
-  await invoke<void>("set_apply_last_on_connect", { value });
-}
-
 export async function setLaunchAtLogin(value: boolean): Promise<void> {
   await invoke<void>("set_launch_at_login", { value });
 }
