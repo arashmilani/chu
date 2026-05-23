@@ -4,12 +4,18 @@ pub mod hotkeys;
 pub mod mira;
 pub mod tray;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+/// Shared, lazily-refreshable hidapi handle. Wrapping a single
+/// instance in a Mutex avoids the macOS issue where two concurrent
+/// `HidApi::new()` calls (watcher + tab-load) walk IOKit at the same
+/// time and hang the process.
+type SharedHidApi = Arc<Mutex<hidapi::HidApi>>;
 
 use crate::commands::{AppError, AppState};
 use crate::domain::hotkeys::{
@@ -185,12 +191,30 @@ fn capture_as_found(state: State<'_, Arc<AppState>>, snapshot: ProfileSettings) 
     state.capture_as_found(snapshot);
 }
 
+/// List currently-connected Mira devices.
+///
+/// `async` so Tauri runs us on the async runtime; we then jump to a
+/// blocking thread for the hidapi call because enumerating HID
+/// devices on macOS can take tens of ms and we don't want to tie up
+/// the IPC runtime.
 #[tauri::command]
-fn list_devices() -> Vec<crate::mira::discovery::DeviceInfo> {
-    match hidapi::HidApi::new() {
-        Ok(api) => crate::mira::discovery::enumerate_mira(&api),
-        Err(_) => Vec::new(),
-    }
+async fn list_devices(
+    hid: State<'_, SharedHidApi>,
+) -> Result<Vec<crate::mira::discovery::DeviceInfo>, AppError> {
+    let hid = hid.inner().clone();
+    let devices = tauri::async_runtime::spawn_blocking(move || -> Vec<_> {
+        let mut api = match hid.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if let Err(e) = api.refresh_devices() {
+            eprintln!("[mira] list_devices: refresh failed: {e}");
+        }
+        crate::mira::discovery::enumerate_mira(&api)
+    })
+    .await
+    .map_err(|e| AppError::internal(format!("list_devices join: {e}")))?;
+    Ok(devices)
 }
 
 #[tauri::command]
@@ -215,11 +239,12 @@ fn udev_rule_present() -> bool {
 #[tauri::command]
 fn select_device(
     state: State<'_, Arc<AppState>>,
+    hid: State<'_, SharedHidApi>,
     app: AppHandle,
     serial: Option<String>,
 ) -> Result<(), AppError> {
     state.set_selected_device_serial(serial);
-    let _ = try_attach_selected_device(&state, &app);
+    let _ = try_attach_selected_device(&state, &hid, &app);
     Ok(())
 }
 
@@ -252,13 +277,14 @@ fn open_settings_window(app: &AppHandle) -> Result<(), tauri::Error> {
     Ok(())
 }
 
-fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
-    let mut api = match hidapi::HidApi::new() {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("[mira] hidapi init failed: {e}");
-            return false;
-        }
+fn try_attach_selected_device(
+    state: &Arc<AppState>,
+    hid: &SharedHidApi,
+    app: &AppHandle,
+) -> bool {
+    let mut api = match hid.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
     };
     if let Err(e) = api.refresh_devices() {
         eprintln!("[mira] hidapi refresh_devices failed: {e}");
@@ -327,11 +353,21 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
     }
 }
 
-fn spawn_device_watcher(state: Arc<AppState>, app: AppHandle) {
+fn spawn_device_watcher(state: Arc<AppState>, hid: SharedHidApi, app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            let _ = try_attach_selected_device(&state, &app);
+            // hidapi I/O is blocking; jump off the runtime so the
+            // IPC main thread stays responsive when this fires
+            // concurrently with a command (e.g. the user opening the
+            // Device tab).
+            let state = state.clone();
+            let hid = hid.clone();
+            let app = app.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                try_attach_selected_device(&state, &hid, &app);
+            })
+            .await;
         }
     });
 }
@@ -552,6 +588,9 @@ pub fn run() {
     let config_path = domain::persistence::config_path().expect("resolve config path");
     let state = Arc::new(AppState::load_from_disk(config_path).expect("load config"));
     let hotkey_manager = Arc::new(HotkeyManager::new());
+    let hid: SharedHidApi = Arc::new(Mutex::new(
+        hidapi::HidApi::new().expect("hidapi init"),
+    ));
 
     tauri::Builder::default()
         .plugin(
@@ -573,15 +612,17 @@ pub fn run() {
         .setup({
             let state = state.clone();
             let hotkey_manager = hotkey_manager.clone();
+            let hid = hid.clone();
             move |app| {
                 app.manage(state.clone());
                 app.manage(hotkey_manager.clone());
+                app.manage(hid.clone());
 
                 let handle = app.handle().clone();
                 build_tray(&handle)?;
                 let _ = register_default_shortcuts(&handle);
-                let _ = try_attach_selected_device(&state, &handle);
-                spawn_device_watcher(state.clone(), handle.clone());
+                let _ = try_attach_selected_device(&state, &hid, &handle);
+                spawn_device_watcher(state.clone(), hid.clone(), handle.clone());
                 Ok(())
             }
         })
