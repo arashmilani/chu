@@ -165,6 +165,77 @@ fn capture_as_found(state: State<'_, Arc<AppState>>, snapshot: ProfileSettings) 
 }
 
 #[tauri::command]
+fn list_devices() -> Vec<crate::mira::discovery::DeviceInfo> {
+    match hidapi::HidApi::new() {
+        Ok(api) => crate::mira::discovery::enumerate_mira(&api),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[tauri::command]
+fn select_device(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    serial: Option<String>,
+) -> Result<(), AppError> {
+    state.set_selected_device_serial(serial);
+    // Re-attach the matching transport, if any.
+    let _ = try_attach_selected_device(&state, &app);
+    Ok(())
+}
+
+fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
+    let api = match hidapi::HidApi::new() {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+    let devices = crate::mira::discovery::enumerate_mira(&api);
+    if devices.is_empty() {
+        state.detach_transport();
+        let _ = app.emit(
+            "device:disconnected",
+            commands::device::DeviceStatus { connected: false },
+        );
+        return false;
+    }
+
+    // Honour the user's selection if it matches a present device.
+    let selected_serial = state.selected_device_serial();
+    let target = if let Some(serial) = selected_serial.as_deref() {
+        devices
+            .iter()
+            .find(|d| d.serial_number.as_deref() == Some(serial))
+            .or_else(|| devices.first())
+            .cloned()
+    } else {
+        devices.first().cloned()
+    };
+
+    if let Some(picked) = target {
+        match crate::mira::transport::HidApiTransport::open(
+            &api,
+            picked.vendor_id,
+            picked.product_id,
+        ) {
+            Ok(transport) => {
+                state.attach_transport(Arc::new(transport));
+                let _ = app.emit(
+                    "device:connected",
+                    commands::device::DeviceStatus { connected: true },
+                );
+                if devices.len() > 1 {
+                    let _ = app.emit("device:multi-detected", &devices);
+                }
+                true
+            }
+            Err(_) => false,
+        }
+    } else {
+        false
+    }
+}
+
+#[tauri::command]
 fn open_editor(app: AppHandle) -> Result<(), AppError> {
     show_or_create(&app, WINDOW_EDITOR).map_err(|e| AppError::internal(e.to_string()))
 }
@@ -418,6 +489,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 build_tray(&handle)?;
                 let _ = register_default_shortcuts(&handle);
+                let _ = try_attach_selected_device(&state, &handle);
                 // Bootstrap: show the popover once on launch so the
                 // user sees the app actually started. After first
                 // hide it lives in the tray.
@@ -456,6 +528,8 @@ pub fn run() {
             is_first_run,
             complete_first_run,
             capture_as_found,
+            list_devices,
+            select_device,
             open_editor,
             open_settings,
             close_popover,

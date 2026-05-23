@@ -10,7 +10,8 @@ pub const MIRA_VID: u16 = 0x0416;
 /// Mira USB product ID — shared across Mira, Mira Pro, Mira Pro Color.
 pub const MIRA_PID: u16 = 0x5020;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     pub vendor_id: u16,
     pub product_id: u16,

@@ -4,12 +4,14 @@ import { HotkeyRecorder } from "../components/HotkeyRecorder";
 import {
   appVersion,
   getAppSettings,
+  listDevices,
   resetHotkeys,
+  selectDevice,
   setApplyLastOnConnect,
   setHotkey,
   setLaunchAtLogin,
 } from "../ipc";
-import type { AppSettings } from "../ipc/types";
+import type { AppSettings, DeviceInfo } from "../ipc/types";
 import { HOTKEY_SLOTS } from "../ipc/types";
 
 type Tab = "General" | "Hotkeys" | "Device" | "About";
@@ -132,19 +134,59 @@ function HotkeysPane({ settings, onChange }: PaneProps) {
 }
 
 function DevicePane({ settings, onChange }: PaneProps) {
+  const [devices, setDevices] = useState<DeviceInfo[]>([]);
+  const [selected, setSelected] = useState<string>("");
+
+  useEffect(() => {
+    listDevices()
+      .then(setDevices)
+      .catch(() => {});
+  }, []);
+
   return (
-    <label className="toggle-row">
-      <input
-        type="checkbox"
-        checked={settings.applyLastProfileOnConnect}
-        onChange={(e) => {
-          const value = e.currentTarget.checked;
-          setApplyLastOnConnect(value).catch(() => {});
-          onChange({ ...settings, applyLastProfileOnConnect: value });
-        }}
-      />
-      Re-apply last profile when the device reconnects
-    </label>
+    <>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={settings.applyLastProfileOnConnect}
+          onChange={(e) => {
+            const value = e.currentTarget.checked;
+            setApplyLastOnConnect(value).catch(() => {});
+            onChange({ ...settings, applyLastProfileOnConnect: value });
+          }}
+        />
+        Re-apply last profile when the device reconnects
+      </label>
+
+      <section aria-label="Connected devices">
+        <h2>Connected devices</h2>
+        {devices.length === 0 ? (
+          <p>No Mira devices found.</p>
+        ) : (
+          <ul>
+            {devices.map((d) => (
+              <li key={d.serialNumber ?? `${d.vendorId}:${d.productId}`}>
+                <label>
+                  <input
+                    type="radio"
+                    name="device"
+                    value={d.serialNumber ?? ""}
+                    checked={selected === (d.serialNumber ?? "")}
+                    onChange={() => {
+                      const serial = d.serialNumber ?? "";
+                      setSelected(serial);
+                      selectDevice(d.serialNumber).catch(() => {});
+                    }}
+                  />
+                  {d.productString ?? "Mira"}
+                  {d.serialNumber ? ` (${d.serialNumber})` : ""}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
   );
 }
 

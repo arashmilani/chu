@@ -9,6 +9,7 @@ import type {
   ApplyOutcome,
   AppError,
   AppSettings,
+  DeviceInfo,
   DeviceStatus,
   Profile,
   ProfileId,
@@ -90,6 +91,22 @@ export async function completeFirstRun(): Promise<void> {
 
 export async function captureAsFound(snapshot: ProfileSettings): Promise<void> {
   await invoke<void>("capture_as_found", { snapshot });
+}
+
+export async function listDevices(): Promise<DeviceInfo[]> {
+  return invoke<DeviceInfo[]>("list_devices");
+}
+
+export async function selectDevice(serial: string | null): Promise<void> {
+  await invoke<void>("select_device", { serial });
+}
+
+export function onMultiDeviceDetected(
+  handler: (devices: DeviceInfo[]) => void,
+): Promise<UnlistenFn> {
+  return listen<DeviceInfo[]>("device:multi-detected", (e) =>
+    handler(e.payload),
+  );
 }
 
 export function onProfileApplied(

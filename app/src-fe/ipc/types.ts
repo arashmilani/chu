@@ -41,6 +41,13 @@ export interface DeviceStatus {
   connected: boolean;
 }
 
+export interface DeviceInfo {
+  vendorId: number;
+  productId: number;
+  serialNumber: string | null;
+  productString: string | null;
+}
+
 export type AppErrorKind =
   | "not-found"
   | "read-only"

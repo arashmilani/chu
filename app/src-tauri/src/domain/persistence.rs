@@ -44,6 +44,10 @@ pub struct Config {
     #[serde(default)]
     pub hotkeys: BTreeMap<String, String>,
     pub profiles: Vec<Profile>,
+    /// Serial number of the Mira the user picked when multiple were
+    /// detected. `None` means "use the first one we find".
+    #[serde(default)]
+    pub selected_device_serial: Option<String>,
 }
 
 fn default_apply_last() -> bool {
@@ -59,6 +63,7 @@ impl Default for Config {
             launch_at_login: false,
             hotkeys: default_hotkeys(),
             profiles: built_in_profiles(),
+            selected_device_serial: None,
         }
     }
 }

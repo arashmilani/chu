@@ -5,7 +5,7 @@ use serde::Serialize;
 use crate::commands::error::AppError;
 use crate::commands::state::AppState;
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceStatus {
     pub connected: bool,

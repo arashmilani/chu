@@ -228,6 +228,24 @@ impl AppState {
         }
     }
 
+    /// Persist the user's choice of device when more than one Mira
+    /// is plugged in. Stored as the serial number string (or `None`
+    /// for "use the first one").
+    pub fn set_selected_device_serial(&self, serial: Option<String>) {
+        let mut inner = self.inner.lock().expect("app state poisoned");
+        inner.config.selected_device_serial = serial;
+        self.persist(&inner);
+    }
+
+    pub fn selected_device_serial(&self) -> Option<String> {
+        self.inner
+            .lock()
+            .expect("app state poisoned")
+            .config
+            .selected_device_serial
+            .clone()
+    }
+
     pub fn set_apply_last_on_connect(&self, value: bool) {
         let mut inner = self.inner.lock().expect("app state poisoned");
         inner.config.apply_last_profile_on_connect = value;

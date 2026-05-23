@@ -108,6 +108,19 @@ export async function completeFirstRun(): Promise<void> {
 }
 export async function captureAsFound(): Promise<void> {}
 
+import type { DeviceInfo } from "../types";
+let _devices: DeviceInfo[] = [];
+export function __setDevices(devices: DeviceInfo[]) {
+  _devices = devices;
+}
+export async function listDevices(): Promise<DeviceInfo[]> {
+  return _devices;
+}
+export async function selectDevice(): Promise<void> {}
+export async function onMultiDeviceDetected() {
+  return () => {};
+}
+
 export async function onProfileApplied() {
   return () => {};
 }
