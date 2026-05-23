@@ -1,0 +1,19 @@
+[package]
+name = "mira-controller"
+version = "0.1.0"
+description = "Mira Boox Pro Controller — a tray utility for Boox Mira and Mira Pro e-ink monitors."
+authors = ["Arash Milani <me@arashmilani.com>"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "mira_controller_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

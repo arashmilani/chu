@@ -1,0 +1,26 @@
+# Dependency directories
+node_modules/
+
+# Build outputs
+dist/
+target/
+
+# Tauri generated
+app/src-tauri/gen/schemas/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+*.suo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env
+.env.local
+*.local
