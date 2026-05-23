@@ -142,7 +142,7 @@ describe("Settings", () => {
     );
     fireEvent.click(screen.getByRole("tab", { name: "Hotkeys" }));
     expect(await screen.findByText(/switch to profile 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/force full refresh/i)).toBeInTheDocument();
+    expect(screen.getByText(/^refresh$/i)).toBeInTheDocument();
     expect(screen.queryByText(/open tray popover/i)).not.toBeInTheDocument();
   });
 

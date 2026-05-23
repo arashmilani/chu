@@ -426,7 +426,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let refresh_item = MenuItem::with_id(
         app,
         "force_refresh",
-        "Force full refresh",
+        "Refresh",
         connected,
         None::<&str>,
     )?;
