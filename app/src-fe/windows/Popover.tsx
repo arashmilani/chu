@@ -7,6 +7,8 @@ import {
   getDeviceStatus,
   isFirstRun,
   listProfiles,
+  onDeviceConnected,
+  onDeviceDisconnected,
 } from "../ipc";
 import type { DeviceStatus, Profile, ProfileId } from "../ipc/types";
 
@@ -51,6 +53,24 @@ export function Popover({
         .catch(() => {});
     }
   }, [initialProfiles, initialStatus, skipFirstRunCheck]);
+
+  // Subscribe to device-state events from the backend's hotplug
+  // watcher so the popover updates without the user re-opening it.
+  useEffect(() => {
+    if (initialStatus !== undefined) return; // Test/preview fixture.
+    let unlistenConn: (() => void) | undefined;
+    let unlistenDisc: (() => void) | undefined;
+    onDeviceConnected((payload) => setStatus(payload))
+      .then((fn) => (unlistenConn = fn))
+      .catch(() => {});
+    onDeviceDisconnected((payload) => setStatus(payload))
+      .then((fn) => (unlistenDisc = fn))
+      .catch(() => {});
+    return () => {
+      unlistenConn?.();
+      unlistenDisc?.();
+    };
+  }, [initialStatus]);
 
   const visible = profiles.slice(0, 8);
   const active = profiles.find((p) => p.id === activeId);

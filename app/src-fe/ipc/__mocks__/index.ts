@@ -129,6 +129,10 @@ export async function onDeviceConnected() {
   return () => {};
 }
 
+export async function onDeviceDisconnected() {
+  return () => {};
+}
+
 export function isAppError(value: unknown) {
   return (
     typeof value === "object" &&

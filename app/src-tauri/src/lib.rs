@@ -205,17 +205,30 @@ fn select_device(
 }
 
 fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
-    let api = match hidapi::HidApi::new() {
+    let mut api = match hidapi::HidApi::new() {
         Ok(a) => a,
-        Err(_) => return false,
+        Err(e) => {
+            eprintln!("[mira] hidapi init failed: {e}");
+            return false;
+        }
     };
+    // hidapi caches the enumeration on construction; without an
+    // explicit refresh, we won't see devices that were plugged in
+    // after the process started.
+    if let Err(e) = api.refresh_devices() {
+        eprintln!("[mira] hidapi refresh_devices failed: {e}");
+    }
     let devices = crate::mira::discovery::enumerate_mira(&api);
     if devices.is_empty() {
+        let was_connected = state.is_connected();
         state.detach_transport();
-        let _ = app.emit(
-            "device:disconnected",
-            commands::device::DeviceStatus { connected: false },
-        );
+        if was_connected {
+            let _ = app.emit(
+                "device:disconnected",
+                commands::device::DeviceStatus { connected: false },
+            );
+            eprintln!("[mira] no Mira devices found on bus (was connected, now disconnected)");
+        }
         return false;
     }
 
@@ -232,6 +245,10 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
     };
 
     if let Some(picked) = target {
+        // If we're already connected, don't churn — just confirm.
+        if state.is_connected() {
+            return true;
+        }
         match crate::mira::transport::HidApiTransport::open(
             &api,
             picked.vendor_id,
@@ -243,16 +260,38 @@ fn try_attach_selected_device(state: &Arc<AppState>, app: &AppHandle) -> bool {
                     "device:connected",
                     commands::device::DeviceStatus { connected: true },
                 );
+                eprintln!(
+                    "[mira] attached Mira VID=0x{:04x} PID=0x{:04x} serial={:?}",
+                    picked.vendor_id, picked.product_id, picked.serial_number
+                );
                 if devices.len() > 1 {
                     let _ = app.emit("device:multi-detected", &devices);
                 }
                 true
             }
-            Err(_) => false,
+            Err(e) => {
+                eprintln!(
+                    "[mira] failed to open Mira VID=0x{:04x} PID=0x{:04x}: {e}",
+                    picked.vendor_id, picked.product_id
+                );
+                false
+            }
         }
     } else {
         false
     }
+}
+
+fn spawn_device_watcher(state: Arc<AppState>, app: AppHandle) {
+    // Periodic re-enumeration so hotplug works. 2s is short enough to
+    // feel responsive and long enough not to thrash hidapi (which on
+    // macOS re-walks IOKit on every call).
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let _ = try_attach_selected_device(&state, &app);
+        }
+    });
 }
 
 #[tauri::command]
@@ -510,6 +549,7 @@ pub fn run() {
                 build_tray(&handle)?;
                 let _ = register_default_shortcuts(&handle);
                 let _ = try_attach_selected_device(&state, &handle);
+                spawn_device_watcher(state.clone(), handle.clone());
                 // Bootstrap: show the popover once on launch so the
                 // user sees the app actually started. After first
                 // hide it lives in the tray.

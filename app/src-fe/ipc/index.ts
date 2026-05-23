@@ -123,6 +123,12 @@ export function onDeviceConnected(
   return listen<DeviceStatus>("device:connected", (e) => handler(e.payload));
 }
 
+export function onDeviceDisconnected(
+  handler: (payload: DeviceStatus) => void,
+): Promise<UnlistenFn> {
+  return listen<DeviceStatus>("device:disconnected", (e) => handler(e.payload));
+}
+
 export function isAppError(value: unknown): value is AppError {
   return (
     typeof value === "object" &&
