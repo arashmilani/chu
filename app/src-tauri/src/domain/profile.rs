@@ -87,6 +87,159 @@ pub struct Profile {
     pub modified_at: OffsetDateTime,
 }
 
+impl BuiltInPreset {
+    /// Per-preset settings from [spec §7.1]. Cold/warm light default
+    /// to 0 across all presets — the front-light is opt-in.
+    pub fn settings(self) -> ProfileSettings {
+        match self {
+            BuiltInPreset::Read => ProfileSettings {
+                refresh_mode: RefreshMode::Direct,
+                speed: 3,
+                contrast: 9,
+                dither_mode: 1,
+                white_filter: 0,
+                black_filter: 0,
+                cold_light: 0,
+                warm_light: 0,
+            },
+            BuiltInPreset::Text => ProfileSettings {
+                refresh_mode: RefreshMode::A2,
+                speed: 5,
+                contrast: 11,
+                dither_mode: 0,
+                white_filter: 12,
+                black_filter: 6,
+                cold_light: 0,
+                warm_light: 0,
+            },
+            BuiltInPreset::Coding => ProfileSettings {
+                refresh_mode: RefreshMode::A2,
+                speed: 6,
+                contrast: 12,
+                dither_mode: 0,
+                white_filter: 16,
+                black_filter: 8,
+                cold_light: 0,
+                warm_light: 0,
+            },
+            BuiltInPreset::Speed => ProfileSettings {
+                refresh_mode: RefreshMode::A2,
+                speed: 7,
+                contrast: 8,
+                dither_mode: 0,
+                white_filter: 0,
+                black_filter: 0,
+                cold_light: 0,
+                warm_light: 0,
+            },
+            BuiltInPreset::Image => ProfileSettings {
+                refresh_mode: RefreshMode::Direct,
+                speed: 2,
+                contrast: 10,
+                dither_mode: 2,
+                white_filter: 0,
+                black_filter: 0,
+                cold_light: 0,
+                warm_light: 0,
+            },
+            BuiltInPreset::Video => ProfileSettings {
+                refresh_mode: RefreshMode::A2,
+                speed: 7,
+                contrast: 7,
+                dither_mode: 0,
+                white_filter: 0,
+                black_filter: 0,
+                cold_light: 0,
+                warm_light: 0,
+            },
+            // As-found is overwritten at first connect from the actual
+            // device snapshot; the static default is "neutral" so the
+            // UI has something to render until a device shows up.
+            BuiltInPreset::AsFound => ProfileSettings {
+                refresh_mode: RefreshMode::Direct,
+                speed: 4,
+                contrast: 8,
+                dither_mode: 1,
+                white_filter: 0,
+                black_filter: 0,
+                cold_light: 0,
+                warm_light: 0,
+            },
+        }
+    }
+
+    /// Display name shown in the UI.
+    pub fn name(self) -> &'static str {
+        match self {
+            BuiltInPreset::Read => "Read",
+            BuiltInPreset::Text => "Text",
+            BuiltInPreset::Coding => "Coding",
+            BuiltInPreset::Speed => "Speed",
+            BuiltInPreset::Image => "Image",
+            BuiltInPreset::Video => "Video",
+            BuiltInPreset::AsFound => "As-found",
+        }
+    }
+
+    /// The default preset on first launch, per spec §7.1.
+    pub fn default_preset() -> Self {
+        BuiltInPreset::Coding
+    }
+
+    /// All six user-facing presets, in spec display order.
+    /// `AsFound` is intentionally excluded — it's generated on first
+    /// connect, not shipped.
+    pub fn all() -> [BuiltInPreset; 6] {
+        [
+            BuiltInPreset::Read,
+            BuiltInPreset::Text,
+            BuiltInPreset::Coding,
+            BuiltInPreset::Speed,
+            BuiltInPreset::Image,
+            BuiltInPreset::Video,
+        ]
+    }
+
+    /// Construct the read-only profile that ships with the app.
+    /// `created_at` / `modified_at` use a stable epoch so the file
+    /// round-trip is deterministic.
+    pub fn into_profile(self) -> Profile {
+        let epoch = OffsetDateTime::from_unix_timestamp(0).unwrap();
+        Profile {
+            id: ProfileId::BuiltIn(self),
+            name: self.name().to_string(),
+            built_in: true,
+            hotkey: None,
+            settings: self.settings(),
+            created_at: epoch,
+            modified_at: epoch,
+        }
+    }
+}
+
+/// All ship-with-the-app presets as `Profile` values.
+pub fn built_in_profiles() -> Vec<Profile> {
+    BuiltInPreset::all()
+        .into_iter()
+        .map(BuiltInPreset::into_profile)
+        .collect()
+}
+
+/// Capture the device's current settings as the "as-found" profile,
+/// shown alongside the six shipped presets so users can revert to
+/// however their Mira behaved before this app first wrote to it.
+pub fn as_found_profile_from(snapshot: ProfileSettings, captured_at: OffsetDateTime) -> Profile {
+    Profile {
+        id: ProfileId::BuiltIn(BuiltInPreset::AsFound),
+        name: BuiltInPreset::AsFound.name().to_string(),
+        built_in: true,
+        hotkey: None,
+        settings: snapshot.clamp(),
+        created_at: captured_at,
+        modified_at: captured_at,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,5 +331,109 @@ mod tests {
     fn clamp_is_idempotent() {
         let clean = sample_settings();
         assert_eq!(clean.clamp(), clean);
+    }
+
+    #[test]
+    fn preset_read_matches_spec_table() {
+        let s = BuiltInPreset::Read.settings();
+        assert_eq!(s.refresh_mode, RefreshMode::Direct);
+        assert_eq!(s.speed, 3);
+        assert_eq!(s.contrast, 9);
+        assert_eq!(s.dither_mode, 1);
+        assert_eq!(s.white_filter, 0);
+        assert_eq!(s.black_filter, 0);
+    }
+
+    #[test]
+    fn preset_text_matches_spec_table() {
+        let s = BuiltInPreset::Text.settings();
+        assert_eq!(s.refresh_mode, RefreshMode::A2);
+        assert_eq!(s.speed, 5);
+        assert_eq!(s.contrast, 11);
+        assert_eq!(s.dither_mode, 0);
+        assert_eq!(s.white_filter, 12);
+        assert_eq!(s.black_filter, 6);
+    }
+
+    #[test]
+    fn preset_coding_matches_spec_table_and_is_the_default() {
+        let s = BuiltInPreset::Coding.settings();
+        assert_eq!(s.refresh_mode, RefreshMode::A2);
+        assert_eq!(s.speed, 6);
+        assert_eq!(s.contrast, 12);
+        assert_eq!(s.dither_mode, 0);
+        assert_eq!(s.white_filter, 16);
+        assert_eq!(s.black_filter, 8);
+        assert_eq!(BuiltInPreset::default_preset(), BuiltInPreset::Coding);
+    }
+
+    #[test]
+    fn preset_speed_matches_spec_table() {
+        let s = BuiltInPreset::Speed.settings();
+        assert_eq!(s.refresh_mode, RefreshMode::A2);
+        assert_eq!(s.speed, 7);
+        assert_eq!(s.contrast, 8);
+        assert_eq!(s.dither_mode, 0);
+        assert_eq!(s.white_filter, 0);
+        assert_eq!(s.black_filter, 0);
+    }
+
+    #[test]
+    fn preset_image_matches_spec_table() {
+        let s = BuiltInPreset::Image.settings();
+        assert_eq!(s.refresh_mode, RefreshMode::Direct);
+        assert_eq!(s.speed, 2);
+        assert_eq!(s.contrast, 10);
+        assert_eq!(s.dither_mode, 2);
+        assert_eq!(s.white_filter, 0);
+        assert_eq!(s.black_filter, 0);
+    }
+
+    #[test]
+    fn preset_video_matches_spec_table() {
+        let s = BuiltInPreset::Video.settings();
+        assert_eq!(s.refresh_mode, RefreshMode::A2);
+        assert_eq!(s.speed, 7);
+        assert_eq!(s.contrast, 7);
+        assert_eq!(s.dither_mode, 0);
+        assert_eq!(s.white_filter, 0);
+        assert_eq!(s.black_filter, 0);
+    }
+
+    #[test]
+    fn built_in_profiles_lists_six_in_spec_order() {
+        let profiles = built_in_profiles();
+        let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Read", "Text", "Coding", "Speed", "Image", "Video"]);
+        assert!(profiles.iter().all(|p| p.built_in));
+    }
+
+    #[test]
+    fn as_found_profile_captures_current_device_snapshot() {
+        let snap = sample_settings();
+        let captured_at = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let profile = as_found_profile_from(snap, captured_at);
+        assert_eq!(profile.id, ProfileId::BuiltIn(BuiltInPreset::AsFound));
+        assert_eq!(profile.name, "As-found");
+        assert!(profile.built_in);
+        assert_eq!(profile.settings, snap);
+        assert_eq!(profile.created_at, captured_at);
+        assert_eq!(profile.modified_at, captured_at);
+    }
+
+    #[test]
+    fn as_found_profile_clamps_a_bad_snapshot() {
+        let snap = ProfileSettings {
+            refresh_mode: RefreshMode::A2,
+            speed: 99, // out of range
+            contrast: 12,
+            dither_mode: 0,
+            white_filter: 16,
+            black_filter: 8,
+            cold_light: 0,
+            warm_light: 0,
+        };
+        let profile = as_found_profile_from(snap, OffsetDateTime::UNIX_EPOCH);
+        assert_eq!(profile.settings.speed, 7);
     }
 }
