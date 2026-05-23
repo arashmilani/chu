@@ -1,0 +1,17 @@
+/* Minimal reset. We don't normalize; we just zero what bites. */
+
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}

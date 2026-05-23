@@ -8,5 +8,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src-fe/tests/setup.ts"],
     include: ["src-fe/**/*.{test,spec}.{ts,tsx}"],
+    pool: "threads",
   },
 });
