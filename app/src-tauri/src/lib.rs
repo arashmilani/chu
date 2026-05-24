@@ -334,6 +334,12 @@ fn open_settings_window(app: &AppHandle) -> Result<(), tauri::Error> {
         }
     });
 
+    // In Accessory mode, a freshly-built window isn't guaranteed to
+    // come to the front or become key — match the reopen path so the
+    // first invocation actually surfaces the window.
+    window.show()?;
+    window.set_focus()?;
+
     Ok(())
 }
 
