@@ -1,0 +1,17 @@
+# Normalize all text files to LF in the working tree on every platform.
+# Prevents Windows CI from checking out CRLF and tripping `prettier --check`.
+* text=auto eol=lf
+
+# Explicit binary types (don't try to normalize)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.dmg binary
+*.exe binary
+*.msi binary

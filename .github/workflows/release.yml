@@ -30,7 +30,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libudev-dev
+            libudev-dev \
+            libxss-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

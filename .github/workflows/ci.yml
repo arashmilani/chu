@@ -28,7 +28,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libudev-dev
+            libudev-dev \
+            libxss-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -42,9 +43,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             app/src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-v2-${{ hashFiles('app/src-tauri/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-v2-
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
