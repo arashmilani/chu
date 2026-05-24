@@ -731,6 +731,14 @@ pub fn run() {
             let hotkey_manager = hotkey_manager.clone();
             let hid = hid.clone();
             move |app| {
+                // Pin the macOS activation policy to Accessory so opening
+                // a window (e.g. Settings) doesn't promote us back to a
+                // regular app and add us to the Dock. LSUIElement only
+                // sets the *initial* policy; AppKit can flip it the first
+                // time a window activates.
+                #[cfg(target_os = "macos")]
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
                 app.manage(state.clone());
                 app.manage(hotkey_manager.clone());
                 app.manage(hid.clone());
