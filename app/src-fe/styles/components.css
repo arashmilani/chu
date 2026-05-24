@@ -549,8 +549,8 @@ fieldset:disabled label {
   --thumb-h: 18px;
   --slider-h: 52px;
   --thumb-center: calc(
-    var(--rail-pad) + var(--thumb-w) / 2 +
-      var(--pct) * (100% - 2 * var(--rail-pad) - var(--thumb-w))
+    var(--rail-pad) + var(--thumb-w) / 2 + var(--pct) *
+      (100% - 2 * var(--rail-pad) - var(--thumb-w))
   );
   position: relative;
   height: var(--slider-h);
