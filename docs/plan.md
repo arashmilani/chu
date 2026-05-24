@@ -1,4 +1,4 @@
-# Mira Boox Pro Controller — Implementation Plan
+# Chu — Implementation Plan
 
 This is a detailed, TDD-first build plan for the app described in
 [specs.md](specs.md). The application lives entirely under `/app/` and is
@@ -98,8 +98,8 @@ window. Reasoning:
   OS conventions, and an extra render cycle.
 - The most-common action (switch profile) is now one click instead of
   click → open popover → click profile.
-- The "Mira" tray title gained two states only: `Mira ◉` (filled
-  fisheye, OK) and `Mira ◎` (bullseye with a hole, anything else).
+- The "Chu" tray title gained two states only: `Chu ◉` (filled
+  fisheye, OK) and `Chu ◎` (bullseye with a hole, anything else).
   Two states require zero memory of which suffix means what.
 - The `openPopover` hotkey was retired with the popover.
 
@@ -547,7 +547,7 @@ no component library.
 5. **test+feat(popover): clicking a profile invokes apply_profile**
 6. **test+feat(popover): "Force full refresh" invokes force_refresh**
 7. **test+feat(popover): "Quit" closes the app**
-8. **test+feat(tray): tray entry shows wordmark "Mira" with state suffix**
+8. **test+feat(tray): tray entry shows wordmark "Chu" with state suffix**
 
 ---
 

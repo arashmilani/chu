@@ -15,8 +15,8 @@ pub struct TrayState {
 impl TrayState {
     /// Wordmark plus a single glyph suffix:
     ///
-    /// - Connected and hotkeys registered: `"Mira ◉"` (filled fisheye)
-    /// - Anything else: `"Mira ◎"` (bullseye with a hole)
+    /// - Connected and hotkeys registered: `"Chu ◉"` (filled fisheye)
+    /// - Anything else: `"Chu ◎"` (bullseye with a hole)
     ///
     /// Two states only — the spec originally called for three (em dash
     /// for disconnect, bang for hotkey failure) but the bullseye glyph
@@ -24,9 +24,9 @@ impl TrayState {
     /// remember which suffix means which.
     pub fn title(&self) -> &'static str {
         if self.connected && self.hotkeys_ok {
-            "Mira ◉"
+            "Chu ◉"
         } else {
-            "Mira ◎"
+            "Chu ◎"
         }
     }
 }
@@ -41,7 +41,7 @@ mod tests {
             connected: true,
             hotkeys_ok: true,
         };
-        assert_eq!(s.title(), "Mira ◉");
+        assert_eq!(s.title(), "Chu ◉");
     }
 
     #[test]
@@ -50,7 +50,7 @@ mod tests {
             connected: false,
             hotkeys_ok: true,
         };
-        assert_eq!(s.title(), "Mira ◎");
+        assert_eq!(s.title(), "Chu ◎");
     }
 
     #[test]
@@ -59,7 +59,7 @@ mod tests {
             connected: true,
             hotkeys_ok: false,
         };
-        assert_eq!(s.title(), "Mira ◎");
+        assert_eq!(s.title(), "Chu ◎");
     }
 
     #[test]
@@ -68,6 +68,6 @@ mod tests {
             connected: false,
             hotkeys_ok: false,
         };
-        assert_eq!(s.title(), "Mira ◎");
+        assert_eq!(s.title(), "Chu ◎");
     }
 }

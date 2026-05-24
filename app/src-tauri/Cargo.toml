@@ -1,13 +1,13 @@
 [package]
-name = "mira-controller"
+name = "chu"
 version = "0.1.0"
-description = "Mira Boox Pro Controller — a tray utility for Boox Mira and Mira Pro e-ink monitors."
+description = "Chu — a tray utility for Boox Mira and Mira Pro e-ink monitors."
 authors = ["Arash Milani <me@arashmilani.com>"]
 edition = "2021"
 license = "MIT"
 
 [lib]
-name = "mira_controller_lib"
+name = "chu_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

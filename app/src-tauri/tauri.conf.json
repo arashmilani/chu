@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mira Controller",
+  "productName": "Chu",
   "version": "0.1.0",
-  "identifier": "com.miracontroller.app",
+  "identifier": "com.arashmilani.chu",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -18,8 +18,8 @@
   "bundle": {
     "active": true,
     "category": "Utility",
-    "shortDescription": "Tray utility for the Boox Mira e-ink monitor.",
-    "longDescription": "One-click switching between curated presets and user-defined profiles for the Boox Mira and Mira Pro e-ink monitors. Includes global hotkeys and a small, e-ink-friendly UI.",
+    "shortDescription": "Chu — tray utility for the Boox Mira e-ink monitor.",
+    "longDescription": "Chu is a tiny menu-bar utility for the Boox Mira and Mira Pro e-ink monitors. One-click switching between curated presets and user-defined profiles, global hotkeys, and a small e-ink-friendly UI.",
     "targets": "all",
     "icon": [
       "icons/32x32.png",

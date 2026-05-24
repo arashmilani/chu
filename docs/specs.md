@@ -1,4 +1,4 @@
-# Mira Boox Pro Controller — Specification
+# Chu — Specification
 
 A small, fast, cross-platform desktop utility for controlling the Boox Mira and
 Mira Pro e-ink monitors. Built because the vendor-supplied software is clunky,
@@ -304,15 +304,15 @@ the most common action (switching profiles).
 
 ### 9.1 Tray menu (primary surface)
 
-A single tray entry labelled with the wordmark **"Mira"** plus a
+A single tray entry labelled with the wordmark **"Chu"** plus a
 status glyph:
 
-- Connected, hotkeys registered: **`Mira ◉`** (filled fisheye)
-- Disconnected or hotkey registration failure: **`Mira ◎`** (bullseye
+- Connected, hotkeys registered: **`Chu ◉`** (filled fisheye)
+- Disconnected or hotkey registration failure: **`Chu ◎`** (bullseye
   with a hole)
 
-Two states only — earlier drafts had three (`Mira —` for disconnect,
-`Mira !` for hotkey failure) but in practice the bullseye glyph reads
+Two states only — earlier drafts had three (`Chu —` for disconnect,
+`Chu !` for hotkey failure) but in practice the bullseye glyph reads
 as "needs attention" without users having to remember which suffix
 means which.
 
@@ -324,7 +324,7 @@ menu contents, top to bottom:
    to the currently active one. Click to apply.
 2. **Refresh** — disabled when no device is connected.
 3. **Settings…** — opens the only window in the app.
-4. **Quit Mira.**
+4. **Quit Chu.**
 
 Because this is a native menu, OS conventions apply: keyboard
 navigation, mnemonics, and accessibility integration are all handled
@@ -462,10 +462,10 @@ but won't skip during AFK. Acceptable trade-off for v1.
 Config and profile data live as a single JSON file in the OS-standard
 location:
 
-- **macOS:** `~/Library/Application Support/MiraController/config.json`
-- **Linux:** `$XDG_CONFIG_HOME/mira-controller/config.json` (default
-  `~/.config/mira-controller/config.json`)
-- **Windows:** `%APPDATA%\MiraController\config.json`
+- **macOS:** `~/Library/Application Support/com.arashmilani.chu/config.json`
+- **Linux:** `$XDG_CONFIG_HOME/chu/config.json` (default
+  `~/.config/chu/config.json`)
+- **Windows:** `%APPDATA%\arashmilani\Chu\config.json`
 
 ### Schema (sketch)
 

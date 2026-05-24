@@ -1,12 +1,42 @@
-# Mira Boox Pro Controller
+<p align="center">
+  <img src="app/src-tauri/icons/source/icon-base.svg" alt="Chu" width="128" height="128">
+</p>
 
-A small, fast, cross-platform desktop utility for controlling Boox Mira and
-Mira Pro e-ink monitors. Tauri 2 + Rust + React.
+# Chu
+
+A small, fast, cross-platform desktop utility for controlling Boox Mira series
+e-ink monitors.
+
+## Motivation
+
+The vendor's Mira app is a 216MB bundle that boots slowly, ignores the
+fact that it's running on an e-ink panel, and leaves a few obvious knobs
+unexposed. Chu aims to fix that:
+
+- **Tiny.** ~10MB on disk and low idle memory — fitting for a utility
+  that sits beside the writing/coding work the e-ink display enables.
+- **Auto full-refresh in A2 mode.** When you're working in the fast A2
+  refresh mode, Chu fires a full refresh on a configurable interval
+  (off by default; opt in from Settings) to clear accumulated
+  ghosting — but only while you're actively using the machine, so an
+  idle panel isn't woken for nothing. The vendor app has no equivalent.
+- **A UI that respects e-ink.** Ironically, the official app's interface
+  is neither designed for e-ink nor responsive; Chu's is both.
+- **One codebase, three platforms.** macOS, Windows, and Linux share the
+  same UX and feature set — no second-class build.
+- **Menu-bar first.** Sub-second startup, stays out of the way, and
+  every documented device knob is one click away.
 
 For the long version, see:
 
 - [docs/specs.md](docs/specs.md) — product spec, protocol notes, UX rules
-- [docs/plan.md](docs/plan.md) — phased, TDD-first implementation plan
+- [docs/plan.md](docs/plan.md) phased plan
+
+## About the name
+
+**Chu** (ちゅう) is the Japanese onomatopoeia for a mouse's squeak. Two
+letters of sound, instantly memorable, and softly friendly — which suits a
+small utility that quietly sits in your menu bar and adjusts your monitors.
 
 ## Repo layout
 
@@ -41,9 +71,6 @@ pnpm dev                # frontend only, served at http://localhost:1420
 
 ## Running the test suites
 
-The TDD loop is what makes this project possible. Both halves of the
-suite must be green for every commit.
-
 ```sh
 cd app
 
@@ -73,4 +100,4 @@ on macOS, Windows, and Ubuntu. A red CI blocks merge to `main`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) once added in Phase 12.
+MIT

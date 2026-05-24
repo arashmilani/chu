@@ -3,9 +3,9 @@
 //!
 //! Layout (spec §10):
 //!
-//! - macOS:   ~/Library/Application Support/MiraController/config.json
-//! - Linux:   $XDG_CONFIG_HOME/mira-controller/config.json
-//! - Windows: %APPDATA%\MiraController\config.json
+//! - macOS:   ~/Library/Application Support/com.arashmilani.chu/config.json
+//! - Linux:   $XDG_CONFIG_HOME/chu/config.json
+//! - Windows: %APPDATA%\arashmilani\Chu\config.json
 //!
 //! Atomicity: writes go to a `*.tmp` sibling and are renamed onto the
 //! target path; if power dies mid-write the original file is intact.
@@ -113,7 +113,7 @@ pub enum PersistenceError {
 
 /// Resolve the OS-standard config file path (per spec §10).
 pub fn config_path() -> Result<PathBuf, PersistenceError> {
-    let dirs = directories::ProjectDirs::from("com", "MiraController", "MiraController")
+    let dirs = directories::ProjectDirs::from("com", "arashmilani", "Chu")
         .ok_or(PersistenceError::NoConfigDir)?;
     Ok(dirs.config_dir().join("config.json"))
 }

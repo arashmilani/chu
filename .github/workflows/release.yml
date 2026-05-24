@@ -70,7 +70,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mira-controller-${{ matrix.os }}
+          name: chu-${{ matrix.os }}
           path: |
             app/src-tauri/target/release/bundle/**/*.dmg
             app/src-tauri/target/release/bundle/**/*.msi

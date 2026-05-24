@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the Mira Controller Settings window",
+  "description": "Capability for the Chu Settings window",
   "windows": ["settings"],
   "permissions": [
     "core:default",

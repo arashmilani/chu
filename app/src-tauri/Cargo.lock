@@ -354,6 +354,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "chu"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "hidapi",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "user-idle",
+ "uuid",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1908,26 +1928,6 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "mira-controller"
-version = "0.1.0"
-dependencies = [
- "directories",
- "hidapi",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tempfile",
- "thiserror 2.0.18",
- "time",
- "tokio",
- "user-idle",
- "uuid",
 ]
 
 [[package]]

@@ -555,11 +555,11 @@ function AboutPane({ version }: { version: string }) {
       <dt>Source</dt>
       <dd>
         <a
-          href="https://github.com/arashmilani/mira-boox-pro-controller"
+          href="https://github.com/arashmilani/chu"
           target="_blank"
           rel="noreferrer"
         >
-          github.com/arashmilani/mira-boox-pro-controller
+          github.com/arashmilani/chu
         </a>
       </dd>
     </dl>

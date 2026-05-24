@@ -27,7 +27,7 @@ use crate::hotkeys::{binding_to_shortcut, HotkeyManager};
 use crate::tray::TrayState;
 
 const WINDOW_SETTINGS: &str = "settings";
-const TRAY_ID: &str = "mira-tray";
+const TRAY_ID: &str = "chu-tray";
 const PROFILE_MENU_PREFIX: &str = "profile:";
 
 // -- Tauri commands --------------------------------------------------
@@ -277,7 +277,7 @@ fn udev_rule_text() -> &'static str {
 fn udev_rule_present() -> bool {
     #[cfg(target_os = "linux")]
     {
-        std::path::Path::new("/etc/udev/rules.d/70-mira.rules").exists()
+        std::path::Path::new("/etc/udev/rules.d/70-chu.rules").exists()
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -320,7 +320,7 @@ fn open_settings_window(app: &AppHandle) -> Result<(), tauri::Error> {
         WINDOW_SETTINGS,
         WebviewUrl::App("index.html?window=settings".into()),
     )
-    .title("Mira — Settings")
+    .title("Chu — Settings")
     .inner_size(820.0, 600.0)
     .build()?;
 
@@ -526,7 +526,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let settings_item = MenuItem::with_id(app, "open_settings", "Settings…", true, None::<&str>)?;
     menu.append(&settings_item)?;
 
-    let quit_item = MenuItem::with_id(app, "quit", "Quit Mira", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Chu", true, None::<&str>)?;
     menu.append(&quit_item)?;
 
     Ok(menu)
