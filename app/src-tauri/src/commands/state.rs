@@ -814,20 +814,23 @@ mod tests {
     // -- Auto-refresh timer ------------------------------------------
 
     /// Set both the feature flag and the threshold (in seconds), then
-    /// force the last-refresh-at marker to "long ago" so the next
-    /// tick can fire without waiting in wall-clock time.
+    /// force the last-refresh-at marker so the next tick can fire
+    /// without waiting in wall-clock time. `None` is treated by the
+    /// tick path as u64::MAX elapsed — semantically equivalent to
+    /// "infinitely stale" without the Windows `Instant` underflow
+    /// that subtracting from `Instant::now()` causes near process start.
     fn arm_auto_refresh(state: &AppState, seconds: u32) {
         state.set_auto_refresh(true, seconds);
         let mut inner = state.inner.lock().unwrap();
-        inner.last_refresh_at = Some(Instant::now() - std::time::Duration::from_secs(60 * 60));
+        inner.last_refresh_at = None;
     }
 
-    /// Push the in-memory last-refresh marker far enough back that
-    /// any practical elapsed check passes. Used after operations that
-    /// reset the clock (apply_profile/switch, set_auto_refresh).
+    /// Force the in-memory last-refresh marker to "infinitely stale".
+    /// Used after operations that reset the clock (apply_profile/switch,
+    /// set_auto_refresh) to verify the next tick wouldn't fire.
     fn force_stale_clock(state: &AppState) {
         let mut inner = state.inner.lock().unwrap();
-        inner.last_refresh_at = Some(Instant::now() - std::time::Duration::from_secs(60 * 60));
+        inner.last_refresh_at = None;
     }
 
     #[test]
