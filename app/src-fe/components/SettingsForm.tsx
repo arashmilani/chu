@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 import type { ProfileSettings, RefreshMode } from "../ipc/types";
 
@@ -147,22 +147,31 @@ function SliderRow({
   disabled,
   onChange,
 }: SliderRowProps) {
+  const pct = max > min ? (value - min) / (max - min) : 0;
+  // --pct (0..1) drives the value-bubble and filled-rail positions via
+  // CSS calc(); see .slider in components.css. Cast through Record
+  // because React's CSSProperties doesn't model custom properties.
+  const style = { "--pct": pct } as CSSProperties;
   return (
     <label className="slider-row">
-      <span>
-        {label} <output>{value}</output>
-      </span>
-      <input
-        type="range"
-        name={name}
-        aria-label={label}
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        disabled={disabled}
-        onChange={(e) => onChange(Number(e.currentTarget.value))}
-      />
+      <span className="slider-row__label">{label}</span>
+      <div className="slider" style={style}>
+        <output className="slider__value" aria-hidden="true">
+          {value}
+        </output>
+        <div className="slider__fill" aria-hidden="true" />
+        <input
+          type="range"
+          name={name}
+          aria-label={label}
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          onChange={(e) => onChange(Number(e.currentTarget.value))}
+        />
+      </div>
     </label>
   );
 }

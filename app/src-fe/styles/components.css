@@ -336,11 +336,10 @@
 }
 
 .settings__pane {
-  padding: var(--space-6);
-  max-width: var(--content-max);
+  padding: var(--space-5);
   overflow-y: auto;
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   align-content: start;
 }
 
@@ -377,61 +376,20 @@
   gap: var(--space-3);
 }
 
-/* Native range slider, restyled. */
+/* Range slider — see .slider-row + .slider further down. The native
+ * <input type="range"> is layered on top of decorative rail/tick/fill
+ * elements; only its thumb is visible, the track is transparent. */
 input[type="range"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 100%;
-  height: var(--hit-target);
   background: transparent;
   cursor: pointer;
   padding: 0;
-}
-
-input[type="range"]::-webkit-slider-runnable-track {
-  height: var(--border-width);
-  background: var(--fg);
-}
-
-input[type="range"]::-moz-range-track {
-  height: var(--border-width);
-  background: var(--fg);
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: var(--space-5);
-  height: var(--space-5);
-  background: var(--bg);
-  border: var(--border-emphasis-style);
-  border-radius: 0;
-  margin-top: calc(var(--space-5) / -2);
-  cursor: grab;
-}
-
-input[type="range"]::-moz-range-thumb {
-  width: var(--space-5);
-  height: var(--space-5);
-  background: var(--bg);
-  border: var(--border-emphasis-style);
-  border-radius: 0;
-  cursor: grab;
+  margin: 0;
 }
 
 input[type="range"]:disabled {
   cursor: not-allowed;
-}
-
-input[type="range"]:disabled::-webkit-slider-thumb,
-input[type="range"]:disabled::-moz-range-thumb {
-  border-color: var(--fg-disabled);
-  background: var(--bg);
-}
-
-input[type="range"]:disabled::-webkit-slider-runnable-track,
-input[type="range"]:disabled::-moz-range-track {
-  background: var(--fg-disabled);
 }
 
 /* Radio + checkbox shared base. */
@@ -552,30 +510,172 @@ fieldset:disabled label {
 
 .settings-form {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-3);
 }
 
 .slider-row {
+  --rail-pad: 16px;
   display: grid;
-  gap: var(--space-2);
+  gap: 2px;
 }
 
-.slider-row > span {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+.slider-row__label {
+  padding-left: var(--rail-pad);
   font-size: var(--font-size-ui);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: var(--tracking-uppercase);
 }
 
-.slider-row output {
+/* -- Slider --------------------------------------------------------
+ *
+ * Layered structure inside .slider:
+ *   ::after  — 1px base rail line (vertical center)
+ *   ::before — repeating 1px tick marks, just below the rail
+ *   .slider__fill  — solid black portion from left to thumb
+ *   .slider__value — floating value bubble above the thumb
+ *   input[type="range"] — transparent track + knurled-pill thumb on top
+ *
+ * --pct is set inline by React (0..1). The native input is inset by
+ * --rail-pad on each side so the browser keeps the thumb fully within
+ * the rail area instead of half-overhanging at the extremes. Bubble
+ * and fill positions track the thumb's actual center, which moves over
+ * [rail-pad + thumb-w/2, 100% - rail-pad - thumb-w/2] — i.e. the
+ * --pct-driven span is (100% - 2*rail-pad - thumb-w).
+ */
+.slider {
+  --pct: 0;
+  --thumb-w: 32px;
+  --thumb-h: 18px;
+  --slider-h: 52px;
+  --thumb-center: calc(
+    var(--rail-pad) + var(--thumb-w) / 2 +
+      var(--pct) * (100% - 2 * var(--rail-pad) - var(--thumb-w))
+  );
+  position: relative;
+  height: var(--slider-h);
+}
+
+.slider::after {
+  content: "";
+  position: absolute;
+  left: var(--rail-pad);
+  right: var(--rail-pad);
+  top: 50%;
+  margin-top: -1px;
+  height: 1px;
+  background: var(--fg);
+  pointer-events: none;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  left: var(--rail-pad);
+  right: var(--rail-pad);
+  top: 50%;
+  margin-top: 3px;
+  height: 6px;
+  /* Ticks are CENTERED in each cell rather than placed at its start.
+   * At the start the first tick lands exactly on the thumb's leftmost
+   * pixel, where the pill's rounded corner (radius = thumb-h/2 = 9px)
+   * leaves the tick's outer rows uncovered, so it bleeds out from
+   * under the thumb at min. Centering pushes the first/last ticks to
+   * half-cell offsets (≈9.5px), inside the pill's full coverage. */
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(100% / 60 - 0.5px),
+    var(--fg) calc(100% / 60 - 0.5px) calc(100% / 60 + 0.5px),
+    transparent calc(100% / 60 + 0.5px) calc(100% / 30)
+  );
+  pointer-events: none;
+}
+
+.slider__fill {
+  position: absolute;
+  left: var(--rail-pad);
+  top: 50%;
+  margin-top: -2px;
+  height: 3px;
+  width: calc(var(--thumb-center) - var(--rail-pad));
+  background: var(--fg);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.slider__value {
+  position: absolute;
+  top: 0;
+  left: var(--thumb-center);
+  transform: translateX(-50%);
   font-family: var(--font-mono);
   font-weight: 700;
   font-size: var(--font-size-mono);
-  letter-spacing: normal;
-  text-transform: none;
+  line-height: 1;
+  padding: 0 var(--space-1);
+  background: var(--bg);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.slider input[type="range"] {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--rail-pad);
+  right: var(--rail-pad);
+  height: 100%;
+  z-index: 2;
+}
+
+.slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+  border: 0;
+}
+
+.slider input[type="range"]::-moz-range-track {
+  height: 100%;
+  background: transparent;
+  border: 0;
+}
+
+/* Knurled pill thumb — three radial-gradient dots act as the grip.
+ * Webkit doesn't vertically auto-center the thumb when the runnable
+ * track has an explicit full height; margin-top puts the thumb on the
+ * rail (Firefox auto-centers, so its rule below leaves margin alone). */
+.slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--thumb-w);
+  height: var(--thumb-h);
+  margin-top: calc((var(--slider-h) - var(--thumb-h)) / 2);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 30% 50%, var(--fg) 1.25px, transparent 1.5px),
+    radial-gradient(circle at 50% 50%, var(--fg) 1.25px, transparent 1.5px),
+    radial-gradient(circle at 70% 50%, var(--fg) 1.25px, transparent 1.5px);
+  border: var(--border-emphasis-style);
+  border-radius: 999px;
+  cursor: grab;
+}
+
+.slider input[type="range"]::-moz-range-thumb {
+  width: var(--thumb-w);
+  height: var(--thumb-h);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 30% 50%, var(--fg) 1.25px, transparent 1.5px),
+    radial-gradient(circle at 50% 50%, var(--fg) 1.25px, transparent 1.5px),
+    radial-gradient(circle at 70% 50%, var(--fg) 1.25px, transparent 1.5px);
+  border: var(--border-emphasis-style);
+  border-radius: 999px;
+  cursor: grab;
+}
+
+.slider input[type="range"]:disabled::-webkit-slider-thumb,
+.slider input[type="range"]:disabled::-moz-range-thumb {
+  border-color: var(--fg-disabled);
 }
 
 /* -- Hotkey list & recorder ---------------------------------------- */
