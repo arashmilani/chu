@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <rect width="1024" height="1024" fill="white"/>
+    <svg x="153" y="186" width="718" height="652" viewBox="0 0 355 323" preserveAspectRatio="xMidYMid meet" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+        <g transform="matrix(1,0,0,1,-165.824,-141.532)">
+            <path d="M464.994,207.492C464.994,207.492 416.144,243.08 466.07,266.393" style="fill:none;stroke:black;stroke-width:10px;"/>
+            <g transform="matrix(0.997369,0.0724853,-0.0724853,0.997369,24.1449,-21.1925)">
+                <path d="M285.57,312.186C285.57,312.186 284.249,332.727 322.551,331.924" style="fill:none;stroke:black;stroke-width:10px;"/>
+            </g>
+            <path d="M218.257,312.861C218.257,312.861 264.96,291.724 292.665,251.647C292.834,231.931 305.372,140.307 378.559,149.706C404.105,152.987 413.096,179.925 413.096,179.925C413.096,179.925 460.101,132.684 499.677,186.021C532.767,230.618 491.147,296.126 491.147,296.126C491.147,296.126 530.537,379.758 432.757,436.26C334.978,492.762 194.7,417.888 191.604,351.32C191.214,342.94 165.694,347.475 175.612,319.113C180.836,304.175 204.672,295.179 218.257,312.861Z" style="fill:none;stroke:black;stroke-width:15px;"/>
+        </g>
+    </svg>
+</svg>
